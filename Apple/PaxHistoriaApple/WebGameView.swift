@@ -3,17 +3,14 @@ import WebKit
 
 @MainActor
 struct NativeWebGameView {
+    let selectedCountry: PlayerCountry
+
     private let bridge = FoundationModelBridge()
 
     private func makeWebView() -> WKWebView {
         let configuration = WKWebViewConfiguration()
         let userContentController = WKUserContentController()
-        let platform = Platform.current
-        let bootstrap = """
-        window.__PAX_APPLE_HOST__ = true;
-        window.__PAX_NATIVE_RUNTIME__ = { mode: "apple", platform: "\(platform)" };
-        try { localStorage.setItem("api_provider", "apple-foundation"); } catch (_) {}
-        """
+        let bootstrap = makeBootstrapScript()
 
         userContentController.add(WeakScriptMessageDelegate(bridge), name: "foundationModel")
         userContentController.addUserScript(
@@ -38,6 +35,50 @@ struct NativeWebGameView {
         #endif
 
         return webView
+    }
+
+    private func makeBootstrapScript() -> String {
+        let countryPayload = jsonLiteral([
+            "code": selectedCountry.code,
+            "name": selectedCountry.name,
+        ])
+        let runtimeGamePayload = jsonLiteral([
+            "country": selectedCountry.name,
+            "countryCode": selectedCountry.code,
+            "difficulty": "standard",
+            "gameDate": "2030-09-15",
+            "language": "English",
+            "round": 1,
+            "startDate": "2025-03-25",
+        ] as [String: Any])
+        let cacheToken = "native-\(selectedCountry.code)-\(Int(Date().timeIntervalSince1970))"
+
+        return """
+        window.__PAX_APPLE_HOST__ = true;
+        window.__PAX_NATIVE_RUNTIME__ = {
+          mode: "apple",
+          platform: "\(Platform.current)",
+          selectedCountry: \(countryPayload)
+        };
+        try {
+          localStorage.setItem("api_provider", "apple-foundation");
+          localStorage.setItem("pax-native-json:game", JSON.stringify(\(runtimeGamePayload)));
+          localStorage.setItem("pax-native-cache-token", "\(cacheToken)");
+          localStorage.setItem("pax-native-player-country", JSON.stringify(\(countryPayload)));
+        } catch (_) {}
+        """
+    }
+
+    private func jsonLiteral(_ value: Any) -> String {
+        guard
+            JSONSerialization.isValidJSONObject(value),
+            let data = try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys]),
+            let text = String(data: data, encoding: .utf8)
+        else {
+            return "{}"
+        }
+
+        return text
     }
 
     fileprivate func loadGame(into webView: WKWebView) {

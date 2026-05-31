@@ -14,6 +14,9 @@
 		A10000000000000000000014 /* FoundationModelBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000005 /* FoundationModelBridge.swift */; };
 		A10000000000000000000015 /* AppleFoundationModelResponder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000006 /* AppleFoundationModelResponder.swift */; };
 		A10000000000000000000016 /* dist in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000007 /* dist */; };
+		A10000000000000000000017 /* PlayerCountry.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000008 /* PlayerCountry.swift */; };
+		A10000000000000000000018 /* NativeCampaignStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000009 /* NativeCampaignStore.swift */; };
+		A10000000000000000000019 /* CountrySelectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000000A /* CountrySelectionView.swift */; };
 		A10000000000000000000020 /* PaxHistoriaApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000001 /* PaxHistoriaApp.swift */; };
 		A10000000000000000000021 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000002 /* ContentView.swift */; };
 		A10000000000000000000022 /* WebGameView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000003 /* WebGameView.swift */; };
@@ -21,6 +24,9 @@
 		A10000000000000000000024 /* FoundationModelBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000005 /* FoundationModelBridge.swift */; };
 		A10000000000000000000025 /* AppleFoundationModelResponder.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000006 /* AppleFoundationModelResponder.swift */; };
 		A10000000000000000000026 /* dist in Resources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000007 /* dist */; };
+		A10000000000000000000027 /* PlayerCountry.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000008 /* PlayerCountry.swift */; };
+		A10000000000000000000028 /* NativeCampaignStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000009 /* NativeCampaignStore.swift */; };
+		A10000000000000000000029 /* CountrySelectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000000A /* CountrySelectionView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -31,6 +37,9 @@
 		A10000000000000000000005 /* FoundationModelBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FoundationModelBridge.swift; sourceTree = "<group>"; };
 		A10000000000000000000006 /* AppleFoundationModelResponder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleFoundationModelResponder.swift; sourceTree = "<group>"; };
 		A10000000000000000000007 /* dist */ = {isa = PBXFileReference; lastKnownFileType = folder; name = dist; path = ../dist; sourceTree = SOURCE_ROOT; };
+		A10000000000000000000008 /* PlayerCountry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerCountry.swift; sourceTree = "<group>"; };
+		A10000000000000000000009 /* NativeCampaignStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeCampaignStore.swift; sourceTree = "<group>"; };
+		A1000000000000000000000A /* CountrySelectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CountrySelectionView.swift; sourceTree = "<group>"; };
 		A10000000000000000000030 /* Pax Historia.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Pax Historia.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		A10000000000000000000031 /* Pax Historia iOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Pax Historia iOS.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -59,6 +68,9 @@
 				A10000000000000000000004 /* AppleAIModels.swift */,
 				A10000000000000000000005 /* FoundationModelBridge.swift */,
 				A10000000000000000000006 /* AppleFoundationModelResponder.swift */,
+				A10000000000000000000008 /* PlayerCountry.swift */,
+				A10000000000000000000009 /* NativeCampaignStore.swift */,
+				A1000000000000000000000A /* CountrySelectionView.swift */,
 			);
 			path = PaxHistoriaApple;
 			sourceTree = "<group>";
@@ -149,8 +161,8 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		A10000000000000000000070 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000010 /* PaxHistoriaApp.swift in Sources */, A10000000000000000000011 /* ContentView.swift in Sources */, A10000000000000000000012 /* WebGameView.swift in Sources */, A10000000000000000000013 /* AppleAIModels.swift in Sources */, A10000000000000000000014 /* FoundationModelBridge.swift in Sources */, A10000000000000000000015 /* AppleFoundationModelResponder.swift in Sources */,); runOnlyForDeploymentPostprocessing = 0; };
-		A10000000000000000000071 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000020 /* PaxHistoriaApp.swift in Sources */, A10000000000000000000021 /* ContentView.swift in Sources */, A10000000000000000000022 /* WebGameView.swift in Sources */, A10000000000000000000023 /* AppleAIModels.swift in Sources */, A10000000000000000000024 /* FoundationModelBridge.swift in Sources */, A10000000000000000000025 /* AppleFoundationModelResponder.swift in Sources */,); runOnlyForDeploymentPostprocessing = 0; };
+		A10000000000000000000070 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000010 /* PaxHistoriaApp.swift in Sources */, A10000000000000000000011 /* ContentView.swift in Sources */, A10000000000000000000012 /* WebGameView.swift in Sources */, A10000000000000000000013 /* AppleAIModels.swift in Sources */, A10000000000000000000014 /* FoundationModelBridge.swift in Sources */, A10000000000000000000015 /* AppleFoundationModelResponder.swift in Sources */, A10000000000000000000017 /* PlayerCountry.swift in Sources */, A10000000000000000000018 /* NativeCampaignStore.swift in Sources */, A10000000000000000000019 /* CountrySelectionView.swift in Sources */,); runOnlyForDeploymentPostprocessing = 0; };
+		A10000000000000000000071 /* Sources */ = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000020 /* PaxHistoriaApp.swift in Sources */, A10000000000000000000021 /* ContentView.swift in Sources */, A10000000000000000000022 /* WebGameView.swift in Sources */, A10000000000000000000023 /* AppleAIModels.swift in Sources */, A10000000000000000000024 /* FoundationModelBridge.swift in Sources */, A10000000000000000000025 /* AppleFoundationModelResponder.swift in Sources */, A10000000000000000000027 /* PlayerCountry.swift in Sources */, A10000000000000000000028 /* NativeCampaignStore.swift in Sources */, A10000000000000000000029 /* CountrySelectionView.swift in Sources */,); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */

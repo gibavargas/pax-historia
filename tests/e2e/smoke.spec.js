@@ -64,3 +64,24 @@ test("native Apple mode selects on-device provider and avoids fatal startup", as
   const provider = await page.evaluate(() => localStorage.getItem("api_provider"));
   expect(provider).toBe("apple-foundation");
 });
+
+test("fresh native Apple mode does not silently choose Germany", async ({ page }, testInfo) => {
+  await page.addInitScript(() => {
+    window.__PAX_APPLE_HOST__ = true;
+    window.__PAX_NATIVE_RUNTIME__ = { mode: "apple", platform: "test" };
+    localStorage.removeItem("pax-native-json:game");
+    localStorage.removeItem("pax-native-player-country");
+  });
+
+  await bootToPlayableMap(page);
+
+  const game = await page.evaluate(() => JSON.parse(localStorage.getItem("pax-native-json:game") || "{}"));
+
+  expect(game.country).toBe("");
+  expect(game.countryCode).toBe("");
+
+  const toggleId = testInfo.project.name === "mobile-safari-size"
+    ? "country-chooser-toggle-mobile"
+    : "country-chooser-toggle";
+  await expect(page.getByTestId(toggleId)).toContainText("Choose nation");
+});

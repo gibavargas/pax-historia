@@ -27,7 +27,6 @@ const Other = memo(function Other({ onOpenCountryChooser, topOffset = "0.5rem" }
         window.addEventListener("pax-game-state-change", loadCountry);
         return () => window.removeEventListener("pax-game-state-change", loadCountry);
     }, []);
-    if (!country) return null;
     return (
         <button
         data-testid="country-chooser-toggle-mobile"
@@ -56,7 +55,7 @@ const Other = memo(function Other({ onOpenCountryChooser, topOffset = "0.5rem" }
             textOverflow: "ellipsis",
         }}
         >
-        {country}
+        {country || "Choose nation"}
         </span>
         </button>
     );

@@ -49,7 +49,7 @@ const withNativeWindow = async (callback) => {
   }
 };
 
-test("Apple native game fallback seeds a playable campaign when bundled JSON fetch fails", async () => {
+test("Apple native game fallback refuses to pick a country before the player does", async () => {
   const game = await readNativeJson(makeNativeJsonUrl("game"), {
     defaultValue: {
       country: "",
@@ -58,7 +58,7 @@ test("Apple native game fallback seeds a playable campaign when bundled JSON fet
     },
   });
 
-  assert.equal(game.country, "Germany");
+  assert.equal(game.country, "");
   assert.equal(game.gameDate, "2030-09-15");
   assert.equal(game.startDate, "2025-03-25");
 });
@@ -94,7 +94,7 @@ test("Apple native API shim serves library records and rejects unsupported reads
     body: { name: "Edited Native Campaign" },
   });
   assert.equal(game.name, "Edited Native Campaign");
-  assert.equal(game.country, "Germany");
+  assert.equal(game.country, "");
 
   const postResult = await requestNativeJson("/api/scenarios", { method: "POST" });
   assert.equal(postResult.selectedScenarioId, "default");

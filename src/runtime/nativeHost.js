@@ -22,7 +22,8 @@ const DEFAULT_SCENARIO = {
 };
 
 const DEFAULT_RUNTIME_GAME = {
-  country: "Germany",
+  country: "",
+  countryCode: "",
   difficulty: "standard",
   gameDate: "2030-09-15",
   language: "English",
@@ -87,9 +88,14 @@ const resolveNativeFallback = (key, defaultValue) => {
   }
 
   if (key === "game") {
+    const nextValue = defaultValue && typeof defaultValue === "object" ? defaultValue : {};
     return {
-      ...defaultValue,
       ...DEFAULT_RUNTIME_GAME,
+      ...nextValue,
+      country: String(nextValue.country ?? DEFAULT_RUNTIME_GAME.country).trim(),
+      countryCode: String(nextValue.countryCode ?? DEFAULT_RUNTIME_GAME.countryCode).trim(),
+      gameDate: String(nextValue.gameDate ?? "").trim() || DEFAULT_RUNTIME_GAME.gameDate,
+      startDate: String(nextValue.startDate ?? "").trim() || DEFAULT_RUNTIME_GAME.startDate,
     };
   }
 
@@ -105,7 +111,7 @@ const getNativeGameSummary = () => {
   const runtimeGame = getNativeRuntimeGame();
   return {
     ...DEFAULT_GAME,
-    country: runtimeGame.country || DEFAULT_RUNTIME_GAME.country,
+    country: runtimeGame.country || "",
     currentDate: runtimeGame.gameDate || DEFAULT_RUNTIME_GAME.gameDate,
     round:
       Number.isFinite(Number(runtimeGame.round)) && Number(runtimeGame.round) > 0
