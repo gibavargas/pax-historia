@@ -22,6 +22,7 @@ export const WORLD_DEFAULTS = {
   simulationHistory: [],
   simulationRules: "",
   startingTimelineText: "",
+  strategicEffects: [],
 };
 
 const cloneValue = (value) => {
@@ -387,6 +388,62 @@ const normalizePolityChange = (entry) => {
   };
 };
 
+const normalizeStrategicEffect = (entry) => {
+  if (typeof entry === "string") {
+    const summary = normalizeString(entry);
+    if (!summary) return null;
+
+    return {
+      date: "",
+      direction: "mixed",
+      eventId: "",
+      id: "",
+      magnitude: 1,
+      summary,
+      target: "World",
+      track: "general",
+    };
+  }
+
+  if (!entry || typeof entry !== "object") {
+    return null;
+  }
+
+  const target = normalizeOptionalString(
+    entry.target || entry.polity || entry.country || entry.scope || entry.actor,
+  ) || "World";
+  const track = normalizeOptionalString(entry.track || entry.domain || entry.type || entry.metric) || "general";
+  const rawDirection = normalizeOptionalString(entry.direction || entry.trend || entry.change).toLowerCase();
+  const direction = ["positive", "negative", "mixed", "neutral"].includes(rawDirection)
+    ? rawDirection
+    : "mixed";
+  const rawMagnitude = Number(entry.magnitude ?? entry.intensity ?? entry.weight ?? entry.score ?? 1);
+  const magnitude = Number.isFinite(rawMagnitude)
+    ? Math.max(1, Math.min(5, Math.round(Math.abs(rawMagnitude))))
+    : 1;
+  const summary = normalizeTextLike(
+    entry.summary || entry.note || entry.description || entry.effect || entry.text,
+  );
+
+  if (!target && !summary) {
+    return null;
+  }
+
+  return {
+    date: normalizeOptionalString(entry.date),
+    direction,
+    eventId: normalizeOptionalString(entry.eventId || entry.eventID),
+    id: normalizeOptionalString(entry.id),
+    magnitude,
+    summary,
+    target,
+    track,
+  };
+};
+
+const normalizeStrategicEffects = (value) =>
+  normalizeArray(value).map(normalizeStrategicEffect).filter(Boolean);
+
 const normalizeEventImpacts = (value) => {
   if (!value || typeof value !== "object") {
     return {
@@ -394,6 +451,7 @@ const normalizeEventImpacts = (value) => {
       createdChats: [],
       polityChanges: [],
       regionTransfers: [],
+      strategicEffects: [],
     };
   }
 
@@ -402,6 +460,7 @@ const normalizeEventImpacts = (value) => {
     createdChats: normalizeChats(value.createdChats),
     polityChanges: normalizeArray(value.polityChanges).map(normalizePolityChange).filter(Boolean),
     regionTransfers: normalizeArray(value.regionTransfers).map(normalizeRegionTransfer).filter(Boolean),
+    strategicEffects: normalizeStrategicEffects(value.strategicEffects || value.effects),
   };
 };
 
@@ -559,6 +618,7 @@ export const normalizeWorldState = (world) => {
       .filter(Boolean),
     simulationRules: normalizeOptionalString(nextWorld.simulationRules),
     startingTimelineText: normalizeOptionalString(nextWorld.startingTimelineText),
+    strategicEffects: normalizeStrategicEffects(nextWorld.strategicEffects).slice(0, 200),
   };
 };
 
@@ -642,6 +702,7 @@ export const readGameStateBundle = async ({ force = false } = {}) => {
 export const applyEventImpactsToWorld = ({ colors = {}, events = [], world }) => {
   const nextColors = cloneValue(colors) ?? {};
   const nextWorld = normalizeWorldState(world);
+  const newStrategicEffects = [];
 
   for (const event of normalizeEvents(events)) {
     for (const transfer of event.impacts.regionTransfers) {
@@ -676,6 +737,22 @@ export const applyEventImpactsToWorld = ({ colors = {}, events = [], world }) =>
         }
       }
     }
+
+    event.impacts.strategicEffects.forEach((effect, index) => {
+      newStrategicEffects.push({
+        ...effect,
+        date: effect.date || event.date,
+        eventId: effect.eventId || event.id,
+        id: effect.id || `${event.id || "event"}-effect-${index}`,
+      });
+    });
+  }
+
+  if (newStrategicEffects.length > 0) {
+    nextWorld.strategicEffects = [
+      ...newStrategicEffects,
+      ...nextWorld.strategicEffects,
+    ].slice(0, 200);
   }
 
   return {

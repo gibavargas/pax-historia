@@ -223,6 +223,8 @@ const resolveRegionName = (transfer, regionLookup) => {
 const getEventMapChangeCount = (event) =>
 (event?.impacts?.regionTransfers?.length || 0) + (event?.impacts?.polityChanges?.length || 0);
 
+const getEventStrategicEffectCount = (event) => event?.impacts?.strategicEffects?.length || 0;
+
 const collectEventTags = (event, { polityLookup, regionLookup }) => {
     const labels = new Set();
 
@@ -250,6 +252,15 @@ const collectEventTags = (event, { polityLookup, regionLookup }) => {
             if (country?.name) {
                 labels.add(country.name);
             }
+        }
+    }
+
+    for (const effect of event?.impacts?.strategicEffects ?? []) {
+        if (effect.target) {
+            labels.add(effect.target);
+        }
+        if (effect.track) {
+            labels.add(effect.track);
         }
     }
 
@@ -591,6 +602,8 @@ const ghostButtonStyle = {
 const EventCard = ({ event, footer = null, lookups }) => {
     const tags = collectEventTags(event, lookups);
     const mapChangeCount = getEventMapChangeCount(event);
+    const strategicEffects = event?.impacts?.strategicEffects ?? [];
+    const strategicEffectCount = getEventStrategicEffectCount(event);
 
     return (
         <div
@@ -622,6 +635,11 @@ const EventCard = ({ event, footer = null, lookups }) => {
             {mapChangeCount} map change{mapChangeCount === 1 ? "" : "s"}
             </MetricPill>
         )}
+        {strategicEffectCount > 0 && (
+            <MetricPill tone="violet">
+            {strategicEffectCount} strategic impact{strategicEffectCount === 1 ? "" : "s"}
+            </MetricPill>
+        )}
         </div>
         </div>
 
@@ -641,6 +659,37 @@ const EventCard = ({ event, footer = null, lookups }) => {
         {event.description && (
             <div className="timeline-markdown" style={{ color: "rgba(221,228,240,0.82)", fontSize: "0.77rem", lineHeight: "1.58" }}>
             <ReactMarkdown>{event.description}</ReactMarkdown>
+            </div>
+        )}
+
+        {strategicEffects.length > 0 && (
+            <div
+            style={{
+                background: "rgba(168,85,247,0.08)",
+                border: "1px solid rgba(192,132,252,0.14)",
+                borderRadius: "12px",
+                display: "flex",
+                flexDirection: "column",
+                gap: "0.45rem",
+                padding: "0.65rem 0.7rem",
+            }}
+            >
+            <div style={{ color: "#e9d5ff", fontSize: "0.68rem", fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+            Strategic impact
+            </div>
+            {strategicEffects.slice(0, 4).map((effect, index) => (
+                <div
+                key={`${event.id}-effect-${effect.id || index}`}
+                style={{
+                    color: "rgba(245,243,255,0.86)",
+                    fontSize: "0.72rem",
+                    lineHeight: "1.45",
+                }}
+                >
+                <strong>{effect.target}</strong> / {effect.track}: {effect.direction} {effect.magnitude}/5
+                {effect.summary ? ` - ${effect.summary}` : ""}
+                </div>
+            ))}
             </div>
         )}
 

@@ -251,6 +251,14 @@ const buildEventHistoryText = (events, { limit = 10 } = {}) => {
         );
       }
 
+      if (event.impacts.strategicEffects.length > 0) {
+        impactNotes.push(
+          `Strategic effects: ${event.impacts.strategicEffects
+            .map((entry) => `${entry.target} ${entry.track} ${entry.direction} ${entry.magnitude}/5`)
+            .join(", ")}`,
+        );
+      }
+
       return [
         `- ${date}: ${event.title}`,
         description ? `  ${description}` : "",
@@ -323,8 +331,43 @@ const buildTerritorySummary = async (world) => {
     .join("\n");
 };
 
+const effectSignedMagnitude = (effect) => {
+  if (effect.direction === "positive") return effect.magnitude;
+  if (effect.direction === "negative") return -effect.magnitude;
+  return 0;
+};
+
+const buildStrategicEffectsSummary = (world) => {
+  const effects = normalizeWorldState(world).strategicEffects;
+  if (effects.length === 0) {
+    return "No durable strategic effects have been recorded yet.";
+  }
+
+  const scoreMap = new Map();
+  for (const effect of effects.slice(0, 80)) {
+    const key = `${effect.target} / ${effect.track}`;
+    scoreMap.set(key, (scoreMap.get(key) ?? 0) + effectSignedMagnitude(effect));
+  }
+
+  const scoreLines = Array.from(scoreMap.entries())
+    .sort((left, right) => Math.abs(right[1]) - Math.abs(left[1]))
+    .slice(0, 8)
+    .map(([key, score]) => `- ${key}: ${score > 0 ? "+" : ""}${score}`);
+  const recentLines = effects
+    .slice(0, 8)
+    .map((effect) => `- ${effect.date || "undated"} ${effect.target} ${effect.track}: ${effect.summary || `${effect.direction} ${effect.magnitude}/5`}`);
+
+  return [
+    "Cumulative pressure:",
+    scoreLines.length > 0 ? scoreLines.join("\n") : "- No scored pressure yet.",
+    "Recent strategic effects:",
+    recentLines.join("\n"),
+  ].join("\n");
+};
+
 const buildWorldSummary = async (bundle) => {
   const territorySummary = await buildTerritorySummary(bundle.world);
+  const strategicEffectsSummary = buildStrategicEffectsSummary(bundle.world);
   const polityOverrides = Object.values(normalizeWorldState(bundle.world).polityOverrides);
   const politySummary =
     polityOverrides.length === 0
@@ -355,6 +398,9 @@ const buildWorldSummary = async (bundle) => {
     "",
     "Dynamic polity overrides:",
     politySummary,
+    "",
+    "Durable strategic effects:",
+    strategicEffectsSummary,
     "",
     catalystSummary,
   ].join("\n");
@@ -815,6 +861,111 @@ const buildGeneratedChat = async (chatLike, linkEventId, world) => {
   });
 };
 
+const actionTrackProfiles = [
+  {
+    track: "military-readiness",
+    keywords: /\b(army|air force|navy|missile|mobiliz|deploy|troop|border|defen[cs]e|weapon|war|strike|readiness|fleet)\b/i,
+    positive: "Readiness improves, but neighboring states and commanders reassess the threat environment.",
+    tension: 2,
+  },
+  {
+    track: "economic-capacity",
+    keywords: /\b(industry|factory|trade|export|import|tax|budget|infrastructure|energy|port|rail|investment|sanction|market)\b/i,
+    positive: "Economic capacity improves if execution holds, with fiscal and market actors adjusting expectations.",
+    tension: 1,
+  },
+  {
+    track: "diplomatic-position",
+    keywords: /\b(diplomac|negot|summit|treaty|alliance|partner|recognition|embassy|message|conference|chat|talk)\b/i,
+    positive: "Diplomatic room for maneuver widens, while counterparts begin testing the seriousness of the signal.",
+    tension: 1,
+  },
+  {
+    track: "domestic-stability",
+    keywords: /\b(reform|health|education|welfare|police|security|stability|protest|party|media|corruption|legal)\b/i,
+    positive: "Domestic control and legitimacy improve, though implementation creates groups that expect follow-through.",
+    tension: 0,
+  },
+  {
+    track: "intelligence-coverage",
+    keywords: /\b(intelligence|spy|cyber|surveillance|counterintelligence|recon|satellite|information)\b/i,
+    positive: "Situational awareness improves, creating earlier warning and more precise options next round.",
+    tension: 1,
+  },
+];
+
+const classifyActionTrack = (action) => {
+  const text = `${action.title} ${buildActionDisplayText(action)}`;
+  return actionTrackProfiles.find((profile) => profile.keywords.test(text)) ?? {
+    track: "administrative-capacity",
+    positive: "State capacity shifts from intent into implementation, creating visible expectations and bureaucratic momentum.",
+    tension: 1,
+  };
+};
+
+const buildActionStrategicEffects = ({ action, bundle, index }) => {
+  const profile = classifyActionTrack(action);
+  const player = bundle.game.country || "Player polity";
+  const magnitude = Math.min(5, 2 + index + (action.kind === "chat" ? 0 : 1));
+  const effects = [
+    {
+      direction: "positive",
+      magnitude,
+      summary: `${action.title} starts moving from intent into execution. ${profile.positive}`,
+      target: player,
+      track: profile.track,
+    },
+  ];
+
+  if (profile.tension > 0) {
+    effects.push({
+      direction: "mixed",
+      magnitude: Math.min(5, profile.tension + index),
+      summary: `${action.title} becomes visible enough that foreign ministries, markets, or security services start pricing in the move.`,
+      target: "Regional balance",
+      track: "external-pressure",
+    });
+  }
+
+  if (action.kind === "chat" && action.invitees.length > 0) {
+    effects.push({
+      direction: "mixed",
+      magnitude: 2,
+      summary: `The diplomatic channel creates a live negotiation track with ${action.invitees.join(", ")} instead of a purely internal order.`,
+      target: action.invitees.join(", "),
+      track: "diplomatic-friction",
+    });
+  }
+
+  return effects;
+};
+
+const buildAmbientStrategicEffects = ({ bundle, days, plannedActions }) => {
+  const hasMilitaryMove = plannedActions.some((action) => classifyActionTrack(action).track === "military-readiness");
+  const hasEconomicMove = plannedActions.some((action) => classifyActionTrack(action).track === "economic-capacity");
+  const track = hasEconomicMove ? "market-confidence" : hasMilitaryMove ? "security-anxiety" : "world-tension";
+
+  return [
+    {
+      direction: hasMilitaryMove ? "negative" : "mixed",
+      magnitude: Math.min(5, Math.max(1, Math.round(days / 60))),
+      summary:
+        plannedActions.length > 0
+          ? "Independent actors react to the player's visible agenda, creating second-order pressure outside direct control."
+          : "Independent actors continue shifting positions while the player gives no direct order.",
+      target: "International system",
+      track,
+    },
+    {
+      direction: "mixed",
+      magnitude: Math.min(5, Math.max(1, plannedActions.length || 1)),
+      summary: `${bundle.game.country || "The player polity"} faces a more complex operating environment as ministries and outside actors update their assumptions.`,
+      target: bundle.game.country || "Player polity",
+      track: "decision-pressure",
+    },
+  ];
+};
+
 const fallbackJumpSimulation = async ({ bundle, days, mode, targetDate }) => {
   const plannedActions = normalizeActions(bundle.actions).filter((action) => action.status === "planned");
   const firstThreeActions = plannedActions.slice(0, 3);
@@ -832,6 +983,7 @@ const fallbackJumpSimulation = async ({ bundle, days, mode, targetDate }) => {
         createdChats: [],
         polityChanges: [],
         regionTransfers: [],
+        strategicEffects: buildAmbientStrategicEffects({ bundle, days, plannedActions }),
       },
       importance: "minor",
       kind: "world",
@@ -849,9 +1001,10 @@ const fallbackJumpSimulation = async ({ bundle, days, mode, targetDate }) => {
         date: eventDate,
         description:
           action.kind === "chat"
-            ? `${bundle.game.country} opens a deliberate diplomatic channel tied to ${action.title.toLowerCase()}, forcing counterparts to weigh terms instead of guessing intent.`
-            : `${bundle.game.country} begins implementing ${action.title.toLowerCase()}, producing immediate administrative and political consequences that other powers start to notice.`,
+            ? `${bundle.game.country} opens a deliberate diplomatic channel tied to ${action.title.toLowerCase()}, forcing counterparts to weigh terms instead of guessing intent. The channel now has a concrete negotiation cost and a chance to shape later events.`
+            : `${bundle.game.country} begins implementing ${action.title.toLowerCase()}, producing immediate administrative and political consequences that other powers start to notice. The order now changes the strategic ledger instead of disappearing after the turn.`,
         impacts: {
+          actionIds: [action.id].filter(Boolean),
           createdChats:
             action.kind === "chat" && action.invitees.length > 0 && action.chatStarter
               ? [
@@ -865,6 +1018,7 @@ const fallbackJumpSimulation = async ({ bundle, days, mode, targetDate }) => {
               : [],
           polityChanges: [],
           regionTransfers: [],
+          strategicEffects: buildActionStrategicEffects({ action, bundle, index }),
         },
         importance: index === firstThreeActions.length - 1 ? "major" : "minor",
         kind: action.kind === "chat" ? "diplomacy" : "player",
@@ -887,6 +1041,7 @@ const fallbackJumpSimulation = async ({ bundle, days, mode, targetDate }) => {
         createdChats: [],
         polityChanges: [],
         regionTransfers: [],
+        strategicEffects: buildAmbientStrategicEffects({ bundle, days, plannedActions }),
       },
       importance: mode === "auto" ? "major" : "minor",
       kind: "world",
@@ -929,6 +1084,15 @@ const eventMentionsPlayer = (event, playerCountry) => {
   return text.includes(player);
 };
 
+const strategicEffectMentionsPlayer = (event, playerCountry) => {
+  const player = normalizeString(playerCountry).toLowerCase();
+  if (!player) return false;
+
+  return event.impacts.strategicEffects.some((effect) =>
+    `${effect.target || ""} ${effect.summary || ""}`.toLowerCase().includes(player),
+  );
+};
+
 const normalizeEventRelevance = (event, { playerCountry }) => {
   if (!event) return event;
   const kind = normalizeString(event.kind).toLowerCase();
@@ -936,6 +1100,7 @@ const normalizeEventRelevance = (event, { playerCountry }) => {
     event.impacts.regionTransfers.length > 0 ||
     event.impacts.polityChanges.length > 0 ||
     event.impacts.createdChats.length > 0 ||
+    strategicEffectMentionsPlayer(event, playerCountry) ||
     event.impacts.actionIds.length > 0;
 
   if (event.playerRelated && kind === "world" && !directImpact && !eventMentionsPlayer(event, playerCountry)) {
@@ -956,6 +1121,15 @@ const createAmbientWorldEvent = ({ baseDate, days }) => ({
     createdChats: [],
     polityChanges: [],
     regionTransfers: [],
+    strategicEffects: [
+      {
+        direction: "mixed",
+        magnitude: Math.min(5, Math.max(1, Math.round(days / 90))),
+        summary: "Independent world movement changes the background pressure that future player actions must navigate.",
+        target: "International system",
+        track: "world-tension",
+      },
+    ],
   },
   importance: "minor",
   kind: "world",

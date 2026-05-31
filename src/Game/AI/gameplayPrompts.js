@@ -182,9 +182,9 @@ Chats: \${CHATS_NON_CONSOLIDATED_ROUNDS}
 \${WORLD_EVENT_REALISM_POLICY}
 
 Return JSON only:
-{"summary":"","stopDate":"YYYY-MM-DD","clearActions":true,"events":[{"date":"YYYY-MM-DD","title":"","description":"","importance":"minor","kind":"world","playerRelated":false,"notable":false,"impacts":{"regionTransfers":[],"polityChanges":[],"createdChats":[]}}],"catalyst":{"title":"","premise":"","opening":"","choices":[]}}
+{"summary":"","stopDate":"YYYY-MM-DD","clearActions":true,"events":[{"date":"YYYY-MM-DD","title":"","description":"","importance":"minor","kind":"world","playerRelated":false,"notable":false,"impacts":{"actionIds":[],"regionTransfers":[],"polityChanges":[],"createdChats":[],"strategicEffects":[{"target":"","track":"","direction":"positive|negative|mixed|neutral","magnitude":1,"summary":""}]}}],"catalyst":{"title":"","premise":"","opening":"","choices":[]}}
 
-Generate 3-8 meaningful events, not filler. Include a mix of independent world events and player-related consequences unless the player's actions are truly global-scale. Never invent player actions the player did not order. Make the final event notable only if it deserves immediate attention.`,
+Generate 3-8 meaningful events, not filler. Include a mix of independent world events and player-related consequences unless the player's actions are truly global-scale. Every player-related event must include at least one strategicEffects item describing the durable political, military, economic, diplomatic, intelligence, or stability consequence. Use map-changing regionTransfers or polityChanges only when the action plausibly changes control, borders, names, or colors. Never invent player actions the player did not order. Make the final event notable only if it deserves immediate attention.`,
   nextSpeaker: `You choose the next speaker in an ongoing diplomatic chat.
 Player polity: \${PLAYER_POLITY}
 Current date: \${ORIGIN_ROUND_DATE}
