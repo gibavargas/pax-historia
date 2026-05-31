@@ -71,11 +71,18 @@ test("Apple native host stores JSON locally and reports a seeded catalog", async
     const url = makeNativeJsonUrl("events");
     await writeNativeJson(url, [{ title: "World event" }]);
     assert.deepEqual(await readNativeJson(url, { defaultValue: [] }), [{ title: "World event" }]);
+    await writeNativeJson(makeNativeJsonUrl("game"), {
+      country: "Brazil",
+      gameDate: "2031-02-03",
+      round: 4,
+      startDate: "2025-03-25",
+    });
 
     const catalog = getNativeLibraryCatalog();
     assert.equal(catalog.activeGameId, "native-game");
-    assert.equal(catalog.games[0].country, "Germany");
-    assert.equal(catalog.games[0].currentDate, "2030-09-15");
+    assert.equal(catalog.games[0].country, "Brazil");
+    assert.equal(catalog.games[0].currentDate, "2031-02-03");
+    assert.equal(catalog.games[0].round, 4);
   });
 });
 

@@ -143,6 +143,34 @@ const applyLibraryCatalog = (catalog) => {
   return libraryState;
 };
 
+export const updateActiveGameRuntimeSummary = ({ country, currentDate, round } = {}) => {
+  const summaryPatch = {};
+  if (String(country ?? "").trim()) summaryPatch.country = String(country).trim();
+  if (String(currentDate ?? "").trim()) summaryPatch.currentDate = String(currentDate).trim();
+  if (Number.isFinite(Number(round)) && Number(round) > 0) {
+    summaryPatch.round = Math.trunc(Number(round));
+  }
+
+  if (Object.keys(summaryPatch).length === 0) {
+    return libraryState;
+  }
+
+  const nextActiveGame = libraryState.activeGame
+    ? { ...libraryState.activeGame, ...summaryPatch }
+    : libraryState.activeGame;
+  const nextGames = libraryState.games.map((game) =>
+    game.id === libraryState.activeGameId ? { ...game, ...summaryPatch } : game,
+  );
+
+  setLibraryState({
+    ...libraryState,
+    activeGame: nextActiveGame,
+    games: nextGames,
+  });
+
+  return libraryState;
+};
+
 export const getLibraryState = () => libraryState;
 
 export const subscribeToLibraryState = (listener) => {

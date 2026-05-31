@@ -34,7 +34,12 @@ const statusColors = {
   watching: "#fde68a",
 };
 
-export const GameStatusStrip = ({ onOpenActions, onOpenAdvisor, topOffset = "4.75rem" }) => {
+export const GameStatusStrip = ({
+  onOpenActions,
+  onOpenAdvisor,
+  onOpenCountryChooser,
+  topOffset = "4.75rem",
+}) => {
   const [snapshot, setSnapshot] = React.useState({
     actions: [],
     ai: getAIHealthSummary(),
@@ -66,11 +71,13 @@ export const GameStatusStrip = ({ onOpenActions, onOpenAdvisor, topOffset = "4.7
     const interval = window.setInterval(() => refresh().catch(() => {}), 5000);
     const refreshAI = () => setSnapshot((current) => ({ ...current, ai: getAIHealthSummary() }));
     window.addEventListener("pax-ai-health-change", refreshAI);
+    window.addEventListener("pax-game-state-change", refresh);
 
     return () => {
       cancelled = true;
       window.clearInterval(interval);
       window.removeEventListener("pax-ai-health-change", refreshAI);
+      window.removeEventListener("pax-game-state-change", refresh);
     };
   }, []);
 
@@ -106,12 +113,24 @@ export const GameStatusStrip = ({ onOpenActions, onOpenAdvisor, topOffset = "4.7
         zIndex: 9997,
       }}
     >
-      <div style={{ ...pillStyle, maxWidth: "13rem" }}>
+      <button
+        data-testid="country-chooser-toggle"
+        onClick={onOpenCountryChooser}
+        style={{
+          ...pillStyle,
+          color: "rgba(255,255,255,0.9)",
+          cursor: "pointer",
+          font: "inherit",
+          maxWidth: "13rem",
+        }}
+        title="Choose player country"
+        type="button"
+      >
         <strong style={{ color: "white" }}>{snapshot.game.country || "Choose nation"}</strong>
         <span style={{ color: "rgba(255,255,255,0.52)", overflow: "hidden", textOverflow: "ellipsis" }}>
           R{snapshot.game.round || 1} · {formatDate(snapshot.game.gameDate)}
         </span>
-      </div>
+      </button>
 
       <button
         onClick={onOpenActions}

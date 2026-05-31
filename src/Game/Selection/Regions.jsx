@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useMap } from "react-map-gl/maplibre";
 import { resolveCountryDisplayName } from "../../runtime/assets.js";
+import { selectPlayerCountry } from "../../runtime/playerCountry.js";
 
 let _setSelection = null;
 let _currentSelection = null;
@@ -17,11 +18,10 @@ export const onRegionSelected = ({ COUNTRY, NAME_1, GID_0, lngLat }) => {
 
     if (isSame) {
         _dismiss?.();
-    } else if (_currentSelection !== null) {
-        _dismiss?.();
-    } else {
-        _setSelection({ COUNTRY, NAME_1, GID_0, lngLat });
+        return;
     }
+
+    _setSelection({ COUNTRY, NAME_1, GID_0, lngLat });
 };
 
 export const onOceanClicked = () => {
@@ -117,6 +117,24 @@ const IconBtn = ({ children, title, onClick }) => {
     );
 };
 
+const chooseButtonBaseStyle = {
+    alignItems: "center",
+    border: "1px solid rgba(129, 140, 248, 0.38)",
+    borderRadius: "9px",
+    color: "white",
+    cursor: "pointer",
+    display: "flex",
+    fontFamily: "sans-serif",
+    fontSize: "12px",
+    fontWeight: 700,
+    gap: "0.35rem",
+    justifyContent: "center",
+    marginTop: "0.7rem",
+    minHeight: "2.25rem",
+    padding: "0.55rem 0.7rem",
+    width: "100%",
+};
+
 const ANIM_ID = "region-popup-anims";
 
 if (typeof document !== "undefined" && !document.getElementById(ANIM_ID)) {
@@ -142,6 +160,7 @@ const RegionPopup = () => {
     const [dismissing, setDismissing] = useState(false);
     const [flagState, setFlagState] = useState(() => createFlagState());
     const [flagImageFailed, setFlagImageFailed] = useState(false);
+    const [chooseState, setChooseState] = useState({ error: "", status: "idle" });
     const { current: map } = useMap();
 
     _setSelection = (value) => {
@@ -149,6 +168,7 @@ const RegionPopup = () => {
         setDismissing(false);
         setFlagState(value ? createFlagState("loading") : createFlagState());
         setFlagImageFailed(false);
+        setChooseState({ error: "", status: "idle" });
         setSelection(value);
         if (value !== null) setAnimKey((key) => key + 1);
     };
@@ -264,6 +284,27 @@ const RegionPopup = () => {
     const POPUP_WIDTH = 210;
     const showFlagImage = Boolean(flagState.imageUrl && !flagImageFailed);
     const showFlagEmoji = Boolean(!showFlagImage && flagState.emoji);
+    const isChoosing = chooseState.status === "saving";
+    const isChosen = chooseState.status === "chosen";
+
+    const handleChooseCountry = async () => {
+        if (!displayCountry || isChoosing) return;
+
+        setChooseState({ error: "", status: "saving" });
+
+        try {
+            await selectPlayerCountry({
+                code: selection.GID_0,
+                name: displayCountry,
+            });
+            setChooseState({ error: "", status: "chosen" });
+        } catch (error) {
+            setChooseState({
+                error: error instanceof Error ? error.message : "Could not choose this country.",
+                status: "error",
+            });
+        }
+    };
 
     return createPortal(
         <div
@@ -381,6 +422,27 @@ const RegionPopup = () => {
         <IconBtn title="Copy region name" onClick={() => navigator.clipboard?.writeText(NAME_1)}>{"\u29C9"}</IconBtn>
         <IconBtn title="Region info">{"\u24D8"}</IconBtn>
         </div>
+
+        <button
+        data-testid="choose-player-country"
+        disabled={isChoosing}
+        onClick={handleChooseCountry}
+        style={{
+            ...chooseButtonBaseStyle,
+            background: isChosen
+            ? "linear-gradient(180deg, rgba(22,163,74,0.88), rgba(21,128,61,0.86))"
+            : "linear-gradient(180deg, rgba(99,102,241,0.92), rgba(79,70,229,0.88))",
+            opacity: isChoosing ? 0.72 : 1,
+        }}
+        type="button"
+        >
+        {isChoosing ? "Choosing..." : isChosen ? `Playing as ${displayCountry}` : `Play as ${displayCountry}`}
+        </button>
+        {chooseState.error && (
+            <div style={{ color: "#fecaca", fontSize: "11px", lineHeight: 1.35, marginTop: "0.45rem" }}>
+            {chooseState.error}
+            </div>
+        )}
         </div>
         </div>
         </div>

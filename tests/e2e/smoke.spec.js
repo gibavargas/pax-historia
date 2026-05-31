@@ -28,6 +28,27 @@ test("settings expose Apple provider and AI reliability guardrails", async ({ pa
   await page.screenshot({ path: testInfo.outputPath("settings-ai.png"), fullPage: true });
 });
 
+test("player can choose country from the HUD selector", async ({ page }, testInfo) => {
+  await bootToPlayableMap(page);
+
+  const toggleId = testInfo.project.name === "mobile-safari-size"
+    ? "country-chooser-toggle-mobile"
+    : "country-chooser-toggle";
+  await page.getByTestId(toggleId).click();
+  await expect(page.getByTestId("country-chooser")).toBeVisible();
+  await page.getByTestId("country-chooser-search").fill("Brazil");
+  await page.getByTestId("country-chooser-option").filter({ hasText: "Brazil" }).first().click();
+
+  await expect(page.getByTestId("country-chooser")).toHaveCount(0);
+  const game = await page.evaluate(async () => {
+    const response = await fetch("/api/runtime/json/game");
+    return response.json();
+  });
+  expect(game.country).toBe("Brazil");
+  await expect(page.getByTestId(toggleId)).toContainText("Brazil");
+  await page.screenshot({ path: testInfo.outputPath("country-selected.png"), fullPage: true });
+});
+
 test("native Apple mode selects on-device provider and avoids fatal startup", async ({ page }) => {
   await page.addInitScript(() => {
     window.__PAX_APPLE_HOST__ = true;

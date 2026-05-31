@@ -3,6 +3,7 @@ import { SettingsButton, SettingsMenu } from "./settings";
 import { LibraryTopBar, TOP_BAR_OFFSET } from "./libraryBar";
 import { DateWidget } from "./time";
 import { GameStatusStrip } from "./GameStatusStrip.jsx";
+import CountryChooser from "./CountryChooser.jsx";
 import { Other } from "./other";
 import { Toolbar } from "./chat";
 import { Search } from "./search";
@@ -114,6 +115,7 @@ const Main = ({
 }) => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isAdvisorOpen, setIsAdvisorOpen] = useState(false);
+  const [isCountryChooserOpen, setIsCountryChooserOpen] = useState(false);
   const [activeBottomPanel, setActiveBottomPanel] = useState(null);
   const [shouldLoadAdvisor, setShouldLoadAdvisor] = useState(false);
   const [isFullscreenEnabled, setIsFullscreenEnabled] = useState(false);
@@ -198,16 +200,24 @@ const Main = ({
         topOffset={TOP_BAR_OFFSET}
       />
       <GameStatusStrip
+        onOpenCountryChooser={() => setIsCountryChooserOpen(true)}
         onOpenActions={openActions}
         onOpenAdvisor={openAdvisor}
         topOffset={TOP_BAR_OFFSET}
+      />
+      <CountryChooser
+        isOpen={isCountryChooserOpen}
+        onClose={() => setIsCountryChooserOpen(false)}
       />
       <Toolbar
         onOpenAdvisor={openAdvisor}
         activePanel={activeBottomPanel}
         onTogglePanel={toggleBottomPanel}
       />
-      <Other topOffset={TOP_BAR_OFFSET} />
+      <Other
+        onOpenCountryChooser={() => setIsCountryChooserOpen(true)}
+        topOffset={TOP_BAR_OFFSET}
+      />
       <Search mapRef={mapRef} />
       <AdvisorButton
         isAdvisorOpen={isAdvisorOpen}

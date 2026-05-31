@@ -1103,10 +1103,12 @@ const DateWidget = ({
 
         loadState();
         const interval = setInterval(loadState, 5000);
+        window.addEventListener("pax-game-state-change", loadState);
 
         return () => {
             cancelled = true;
             clearInterval(interval);
+            window.removeEventListener("pax-game-state-change", loadState);
         };
     }, []);
 

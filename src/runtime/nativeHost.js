@@ -69,6 +69,17 @@ const NATIVE_JSON_DEFAULTS = {
 
 const nativeStorageKey = (key) => `pax-native-json:${key}`;
 
+const readStoredNativeJson = (key) => {
+  if (typeof localStorage === "undefined") return null;
+
+  try {
+    const stored = localStorage.getItem(nativeStorageKey(key));
+    return stored ? JSON.parse(stored) : null;
+  } catch {
+    return null;
+  }
+};
+
 const resolveNativeFallback = (key, defaultValue) => {
   const nativeDefault = NATIVE_JSON_DEFAULTS[key];
   if (defaultValue === undefined) {
@@ -83,6 +94,24 @@ const resolveNativeFallback = (key, defaultValue) => {
   }
 
   return defaultValue;
+};
+
+const getNativeRuntimeGame = () => ({
+  ...DEFAULT_RUNTIME_GAME,
+  ...(readStoredNativeJson("game") ?? {}),
+});
+
+const getNativeGameSummary = () => {
+  const runtimeGame = getNativeRuntimeGame();
+  return {
+    ...DEFAULT_GAME,
+    country: runtimeGame.country || DEFAULT_RUNTIME_GAME.country,
+    currentDate: runtimeGame.gameDate || DEFAULT_RUNTIME_GAME.gameDate,
+    round:
+      Number.isFinite(Number(runtimeGame.round)) && Number(runtimeGame.round) > 0
+        ? Math.trunc(Number(runtimeGame.round))
+        : 1,
+  };
 };
 
 export const isAppleNativeHost = () => {
@@ -163,11 +192,12 @@ export const getNativeLibraryCatalog = () => {
     typeof localStorage !== "undefined"
       ? localStorage.getItem("pax-native-cache-token") || "native-save0"
       : "native-save0";
+  const game = getNativeGameSummary();
 
   return {
-    activeGameId: DEFAULT_GAME.id,
+    activeGameId: game.id,
     baseSaves: ["save0"],
-    games: [{ ...DEFAULT_GAME, cacheToken: token }],
+    games: [{ ...game, cacheToken: token }],
     runtimeScenario: { ...DEFAULT_SCENARIO, cacheToken: token },
     scenarios: [{ ...DEFAULT_SCENARIO, cacheToken: token }],
     selectedScenarioId: DEFAULT_SCENARIO.id,
@@ -186,7 +216,7 @@ export const requestNativeJson = async (pathname, { body, method = "GET" } = {})
 
   if (pathname.startsWith("/api/scenarios/default") || pathname.startsWith("/api/games/native-game")) {
     return pathname.startsWith("/api/games/")
-      ? { ...DEFAULT_GAME, ...(body ?? {}) }
+      ? { ...getNativeGameSummary(), ...(body ?? {}) }
       : { ...DEFAULT_SCENARIO, ...(body ?? {}) };
   }
 
