@@ -7,6 +7,7 @@ import {
     providerSupportsModelDiscovery,
 } from "../AI/providerConfig.js";
 import { getAIHealthSummary, resetAIHealthMetrics } from "../AI/aiHealth.js";
+import { callAppleFoundation, getAppleFoundationStatus, isAppleFoundationBridgeAvailable } from "../AI/appleBridge.js";
 
 const baseStyle = {
     position: "fixed",
@@ -293,6 +294,141 @@ const SettingsInput = ({
     </div>
 );
 
+const formatAppleStatus = (availability) => {
+    const labels = {
+        "apple-intelligence-not-enabled": "Apple Intelligence not enabled",
+        "assets-unavailable": "Model assets unavailable",
+        "concurrent-request": "Another generation is active",
+        "context-window-exceeded": "Context window exceeded",
+        "device-not-eligible": "Device not eligible",
+        "empty-response": "Empty native response",
+        "generation-error": "Generation error",
+        "guardrail-violation": "Guardrail blocked",
+        "invalid-request": "Invalid harness request",
+        "model-not-ready": "Model not ready",
+        "native-bridge-unavailable": "Native bridge unavailable",
+        "not-checked": "Not checked yet",
+        "rate-limited": "Rate limited",
+        "refusal": "Model refused",
+        "timeout": "Timed out",
+        "unsupported-language-or-locale": "Unsupported language or locale",
+        "unsupported-os": "Unsupported OS",
+        available: "Available",
+        mock: "Mock bridge",
+        unavailable: "Unavailable",
+    };
+
+    return labels[availability] ?? availability ?? "Unknown";
+};
+
+const AppleFoundationStatusPanel = () => {
+    const [status, setStatus] = useState(() => getAppleFoundationStatus());
+    const [isChecking, setIsChecking] = useState(false);
+
+    useEffect(() => {
+        const refresh = () => setStatus(getAppleFoundationStatus());
+        window.addEventListener("pax-apple-foundation-status-change", refresh);
+        window.addEventListener("storage", refresh);
+        refresh();
+        return () => {
+            window.removeEventListener("pax-apple-foundation-status-change", refresh);
+            window.removeEventListener("storage", refresh);
+        };
+    }, []);
+
+    const bridgeAvailable = status.bridgeAvailable || isAppleFoundationBridgeAvailable();
+    const isReady = status.availability === "available" && !status.fallbackUsed;
+    const statusColor = isReady
+        ? "#86efac"
+        : status.availability === "not-checked"
+            ? "rgba(255,255,255,0.68)"
+            : "#fde68a";
+    const checkedLabel = status.checkedAt
+        ? new Date(status.checkedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+        : "not checked";
+    const issueText = [status.error, status.recoverySuggestion].filter(Boolean).join(" ");
+    const checkAppleStatus = async () => {
+        setIsChecking(true);
+        try {
+            await callAppleFoundation(
+                "You are a readiness probe for Pax Historia. Reply with exactly: ready",
+                [{ role: "user", parts: [{ text: "Reply ready if the on-device model can generate." }] }],
+                {
+                    maxTokens: 16,
+                    responseFormat: "text",
+                    taskKey: "statusCheck",
+                    timeoutMs: 12_000,
+                    userMessage: "Reply ready if the on-device model can generate.",
+                },
+            );
+        } catch {
+            // The bridge records the actionable status; the panel refreshes from local storage below.
+        } finally {
+            setStatus(getAppleFoundationStatus());
+            setIsChecking(false);
+        }
+    };
+
+    return (
+        <div
+        style={{
+            marginTop: "0.55rem",
+            padding: "0.7rem",
+            borderRadius: "8px",
+            border: "1px solid rgba(255,255,255,0.1)",
+            backgroundColor: "rgba(0,0,0,0.16)",
+        }}
+        >
+        <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "center" }}>
+        <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: "0.78rem", fontWeight: 800, color: statusColor }}>
+        {formatAppleStatus(status.availability)}
+        </div>
+        <div style={{ ...helperStyle, marginTop: "0.2rem" }}>
+        Bridge {bridgeAvailable ? "connected" : "not connected"} · last check {checkedLabel}
+        </div>
+        </div>
+        {status.taskKey && (
+            <span style={{ fontSize: "0.68rem", color: "rgba(255,255,255,0.58)", whiteSpace: "nowrap" }}>
+            {status.taskKey}
+            </span>
+        )}
+        </div>
+        {status.tokenBudget && (
+            <div style={{ ...helperStyle, marginTop: "0.45rem" }}>
+            Budget: {status.tokenBudget}
+            </div>
+        )}
+        {issueText && (
+            <div style={{ ...helperStyle, marginTop: "0.45rem", color: "rgba(255,255,255,0.74)" }}>
+            {issueText}
+            </div>
+        )}
+        <div style={{ ...helperStyle, marginTop: "0.45rem" }}>
+        Device compatibility is only one gate; the native bridge now reports Apple's exact readiness state.
+        </div>
+        <button
+        onClick={checkAppleStatus}
+        disabled={isChecking}
+        style={{
+            marginTop: "0.6rem",
+            width: "100%",
+            padding: "0.55rem 0.65rem",
+            borderRadius: "8px",
+            border: "1px solid rgba(255,255,255,0.12)",
+            backgroundColor: isChecking ? "rgba(255,255,255,0.08)" : "rgba(59,130,246,0.22)",
+            color: "white",
+            cursor: isChecking ? "default" : "pointer",
+            fontSize: "0.78rem",
+            fontWeight: 700,
+        }}
+        >
+        {isChecking ? "Checking Apple status..." : "Check Apple status"}
+        </button>
+        </div>
+    );
+};
+
 const ProviderSettingsPanel = ({ provider, settings, onSettingChange }) => {
     const meta = getProviderMeta(provider);
     const supportsModelDiscovery = providerSupportsModelDiscovery(provider);
@@ -339,6 +475,7 @@ const ProviderSettingsPanel = ({ provider, settings, onSettingChange }) => {
             Uses the native iOS/macOS app bridge. When Apple Intelligence is unavailable, the game
             keeps turns safe with deterministic local fallbacks instead of blocking play. The harness
             budgets against Apple's 4,096-token session context and reserves response tokens per task.
+            <AppleFoundationStatusPanel />
             </div>
         )}
 

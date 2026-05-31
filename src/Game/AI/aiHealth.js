@@ -55,7 +55,7 @@ export const recordAIResult = ({
     calls: metrics.calls + 1,
     failures: metrics.failures + (entry.ok ? 0 : 1),
     fallbacks: metrics.fallbacks + (entry.fallbackUsed ? 1 : 0),
-    lastError: entry.ok ? metrics.lastError : entry.error,
+    lastError: entry.ok && !entry.fallbackUsed ? metrics.lastError : entry.error,
     recent: [...metrics.recent, entry].slice(-RECENT_LIMIT),
   };
 

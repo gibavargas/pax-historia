@@ -27,7 +27,9 @@ struct AppleAIResponse: Encodable {
     let fallbackUsed: Bool
     let ok: Bool
     let provider: String
+    let recoverySuggestion: String?
     let requestId: String
+    let taskKey: String?
     let text: String
     let tokenBudget: String?
 }

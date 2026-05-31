@@ -8,6 +8,8 @@ import {
 } from "./harness.js";
 
 const BRIDGE_NAME = "foundationModel";
+export const APPLE_FOUNDATION_STATUS_KEY = "pax_apple_foundation_status_v1";
+
 const pendingRequests = new Map();
 let installed = false;
 
@@ -30,25 +32,136 @@ export const isAppleFoundationBridgeAvailable = () => {
   return Boolean(getBridgeHandler() || window.__paxAppleAI?.mockRespond);
 };
 
+const emptyStatus = () => ({
+  availability: "not-checked",
+  bridgeAvailable: isAppleFoundationBridgeAvailable(),
+  checkedAt: "",
+  error: "",
+  fallbackUsed: false,
+  ok: false,
+  provider: "apple-foundation",
+  recoverySuggestion: "",
+  requestId: "",
+  taskKey: "",
+  tokenBudget: "",
+});
+
+export const getAppleFoundationStatus = () => {
+  if (typeof localStorage === "undefined") {
+    return emptyStatus();
+  }
+
+  try {
+    const parsed = JSON.parse(localStorage.getItem(APPLE_FOUNDATION_STATUS_KEY) || "null");
+    return parsed && typeof parsed === "object"
+      ? { ...emptyStatus(), ...parsed, bridgeAvailable: isAppleFoundationBridgeAvailable() }
+      : emptyStatus();
+  } catch {
+    return emptyStatus();
+  }
+};
+
+const normalizeAppleResponse = (response, payload = {}) => {
+  if (typeof response === "string") {
+    return {
+      availability: "mock",
+      error: "",
+      fallbackUsed: false,
+      ok: true,
+      provider: "apple-foundation",
+      recoverySuggestion: "",
+      requestId: payload.requestId || "",
+      taskKey: payload.taskKey || "",
+      text: response,
+      tokenBudget: "",
+    };
+  }
+
+  if (!response || typeof response !== "object") {
+    return {
+      availability: "empty-response",
+      error: "Apple Foundation Models returned an empty native response.",
+      fallbackUsed: true,
+      ok: false,
+      provider: "apple-foundation",
+      recoverySuggestion: "Retry from the native app; if this repeats, the WebKit bridge response contract is broken.",
+      requestId: payload.requestId || "",
+      taskKey: payload.taskKey || "",
+      text: "",
+      tokenBudget: "",
+    };
+  }
+
+  return {
+    availability: response?.availability || (response?.ok === false ? "unavailable" : "available"),
+    error: response?.error || "",
+    fallbackUsed: Boolean(response?.fallbackUsed),
+    ok: response?.ok !== false,
+    provider: response?.provider || "apple-foundation",
+    recoverySuggestion: response?.recoverySuggestion || "",
+    requestId: response?.requestId || payload.requestId || "",
+    taskKey: response?.taskKey || payload.taskKey || "",
+    text: response?.text ?? "",
+    tokenBudget: response?.tokenBudget || "",
+  };
+};
+
+const persistAppleFoundationStatus = (response) => {
+  const status = {
+    ...emptyStatus(),
+    availability: response.availability,
+    bridgeAvailable: isAppleFoundationBridgeAvailable(),
+    checkedAt: new Date().toISOString(),
+    error: response.error,
+    fallbackUsed: response.fallbackUsed,
+    ok: response.ok,
+    provider: response.provider,
+    recoverySuggestion: response.recoverySuggestion,
+    requestId: response.requestId,
+    taskKey: response.taskKey,
+    tokenBudget: response.tokenBudget,
+  };
+
+  if (typeof localStorage !== "undefined") {
+    localStorage.setItem(APPLE_FOUNDATION_STATUS_KEY, JSON.stringify(status));
+  }
+
+  if (
+    typeof window !== "undefined" &&
+    typeof window.dispatchEvent === "function" &&
+    typeof CustomEvent === "function"
+  ) {
+    window.dispatchEvent(new CustomEvent("pax-apple-foundation-status-change", { detail: status }));
+  }
+
+  return status;
+};
+
 const installReceiver = () => {
-  if (installed || typeof window === "undefined") {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  if (installed && typeof window.__paxAppleAI?.receiveResponse === "function") {
     return;
   }
 
   installed = true;
   window.__paxAppleAI = window.__paxAppleAI || {};
-  window.__paxAppleAI.receiveResponse = (response) => {
-    const requestId = response?.requestId;
+  window.__paxAppleAI.receiveResponse = (rawResponse) => {
+    const response = normalizeAppleResponse(rawResponse);
+    const requestId = response.requestId;
     const pending = pendingRequests.get(requestId);
     if (!pending) return;
 
     window.clearTimeout(pending.timeoutId);
     pendingRequests.delete(requestId);
+    persistAppleFoundationStatus(response);
 
-    if (response?.ok) {
-      pending.resolve(response.text ?? "");
+    if (response.ok) {
+      pending.resolve(response);
     } else {
-      pending.reject(new Error(response?.error || "Apple Foundation Models did not return a response."));
+      pending.reject(new Error(response.error || "Apple Foundation Models did not return a response."));
     }
   };
 };
@@ -81,12 +194,30 @@ export const callAppleFoundation = (systemPrompt, history, opts = {}) => {
   };
 
   if (typeof window.__paxAppleAI?.mockRespond === "function") {
-    return Promise.resolve(window.__paxAppleAI.mockRespond(payload));
+    return Promise.resolve(window.__paxAppleAI.mockRespond(payload))
+      .then((mockResponse) => {
+        const response = normalizeAppleResponse(mockResponse, payload);
+        persistAppleFoundationStatus(response);
+
+        if (!response.ok) {
+          throw new Error(response.error || "Apple Foundation Models did not return a response.");
+        }
+
+        return response;
+      });
   }
 
   const handler = getBridgeHandler();
   if (!handler) {
-    throw new Error("Apple Foundation Models are available only in the native iOS/macOS app.");
+    const response = normalizeAppleResponse({
+      availability: "native-bridge-unavailable",
+      error: "Apple Foundation Models are available only in the native iOS/macOS app.",
+      fallbackUsed: true,
+      ok: false,
+      recoverySuggestion: "Open the bundled iOS/macOS app so WebKit can reach the native Foundation Models bridge.",
+    }, payload);
+    persistAppleFoundationStatus(response);
+    throw new Error(response.error);
   }
 
   const promptEnvelope = buildApplePromptEnvelope(payload);
@@ -99,7 +230,17 @@ export const callAppleFoundation = (systemPrompt, history, opts = {}) => {
   return new Promise((resolve, reject) => {
     const timeoutId = window.setTimeout(() => {
       pendingRequests.delete(payload.requestId);
-      reject(new Error("Apple Foundation Models timed out. The deterministic game fallback kept the turn safe."));
+      const response = normalizeAppleResponse({
+        availability: "timeout",
+        error: "Apple Foundation Models timed out. The deterministic game fallback kept the turn safe.",
+        fallbackUsed: true,
+        ok: false,
+        recoverySuggestion: "Retry after the current on-device generation finishes or reduce the amount of campaign context.",
+        requestId: payload.requestId,
+        taskKey,
+      }, payload);
+      persistAppleFoundationStatus(response);
+      reject(new Error(response.error));
     }, opts.timeoutMs ?? 25_000);
 
     pendingRequests.set(payload.requestId, { reject, resolve, timeoutId });

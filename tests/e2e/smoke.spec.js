@@ -39,6 +39,10 @@ test("settings expose Apple provider and AI reliability guardrails", async ({ pa
   await page.getByText("Change").click();
   await page.getByPlaceholder("Search provider, protocol or gateway...").fill("apple");
   await expect(page.getByText("Apple Foundation Models")).toBeVisible();
+  await page.locator("button").filter({ hasText: "Apple Foundation Models" }).first().click();
+  await expect(page.getByText("Apple Foundation Models Settings")).toBeVisible();
+  await expect(page.getByText("Device compatibility is only one gate")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Check Apple status" })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("settings-ai.png"), fullPage: true });
 });
 

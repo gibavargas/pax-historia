@@ -18,9 +18,10 @@ final class AppleFoundationModelResponder {
         if #available(iOS 26.0, macOS 26.0, *) {
             let model = SystemLanguageModel.default
             guard model.isAvailable else {
+                let availability = availabilityDescription(model.availability)
                 return fallbackResponse(
                     for: request,
-                    availability: availabilityDescription(model.availability),
+                    availability: availability,
                     error: "Apple Intelligence is not ready on this device."
                 )
             }
@@ -33,7 +34,9 @@ final class AppleFoundationModelResponder {
                     fallbackUsed: false,
                     ok: true,
                     provider: "apple-foundation",
+                    recoverySuggestion: nil,
                     requestId: request.requestId,
+                    taskKey: request.taskKey,
                     text: result.text,
                     tokenBudget: result.budgetDescription
                 )
@@ -156,10 +159,41 @@ final class AppleFoundationModelResponder {
             fallbackUsed: true,
             ok: true,
             provider: "apple-foundation",
+            recoverySuggestion: recoverySuggestion(forAvailability: availability),
             requestId: request.requestId,
+            taskKey: request.taskKey,
             text: fallbackText(for: request),
             tokenBudget: "fallback context=\(request.contextWindowTokens ?? fallbackContextWindow), estimate=\(request.inputTokenEstimate ?? 0), maxResponse=\(resolvedResponseBudget(for: request))"
         )
+    }
+
+    private func recoverySuggestion(forAvailability availability: String) -> String {
+        switch availability {
+        case "apple-intelligence-not-enabled":
+            return "Turn on Apple Intelligence in Settings or System Settings, then relaunch Pax Historia."
+        case "model-not-ready":
+            return "This device is eligible, but the local model files are not ready yet. Keep the device on power and Wi-Fi, wait for Apple Intelligence to finish preparing, then retry."
+        case "device-not-eligible":
+            return "This device does not report Apple Intelligence eligibility to the Foundation Models framework."
+        case "assets-unavailable":
+            return "The model assets are temporarily unavailable. Let the system finish downloads or preparation, then retry."
+        case "unsupported-language-or-locale":
+            return "Apple Foundation Models rejected the current language or locale. Use a supported Apple Intelligence language and region."
+        case "context-window-exceeded":
+            return "The request exceeded the on-device context window. Pax Historia kept the turn safe; future requests should use the compact Apple prompt path."
+        case "rate-limited":
+            return "Apple Foundation Models rate-limited the request. Wait briefly before asking the game to generate more AI content."
+        case "concurrent-request":
+            return "Apple Foundation Models only accepted one request at a time here. Wait for the current generation to finish, then retry."
+        case "guardrail-violation", "refusal":
+            return "The on-device model declined this generation. The game used a deterministic safe result instead."
+        case "unsupported-os":
+            return "Run the native app on an OS version that includes the Foundation Models framework."
+        case "invalid-request":
+            return "The game sent an invalid Apple AI request. This is a harness bug, not a device compatibility issue."
+        default:
+            return "The game used a deterministic safe result. Check Apple Intelligence readiness and retry from the native app."
+        }
     }
 
     private func buildPromptEnvelope(for request: AppleAIRequest) -> String {

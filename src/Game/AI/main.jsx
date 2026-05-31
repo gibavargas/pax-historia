@@ -433,6 +433,17 @@ async function callAnthropic(systemPrompt, history, { retries = 3, retryDelay = 
     }
 }
 
+function describeAppleAIIssue(result) {
+    const availability = result?.availability ? `Apple status: ${result.availability}` : "Apple Foundation fallback";
+    return [
+        availability,
+        result?.error,
+        result?.recoverySuggestion,
+    ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
 export async function callAI(systemPrompt, history, opts) {
     const provider = getStoredProvider();
 
@@ -442,11 +453,19 @@ export async function callAI(systemPrompt, history, opts) {
 
     try {
         let text = "";
+        let providerResult = null;
 
         switch (provider) {
-        case APPLE_FOUNDATION_PROVIDER:
-            text = await callAppleFoundation(systemPrompt, history, opts);
+        case APPLE_FOUNDATION_PROVIDER: {
+            const result = await callAppleFoundation(systemPrompt, history, opts);
+            if (result && typeof result === "object" && "text" in result) {
+                providerResult = result;
+                text = result.text ?? "";
+            } else {
+                text = result ?? "";
+            }
             break;
+        }
         case "openai":
             text = await callOpenAI(systemPrompt, history, opts);
             break;
@@ -463,6 +482,8 @@ export async function callAI(systemPrompt, history, opts) {
         }
 
         recordAIResult({
+            error: providerResult?.fallbackUsed ? describeAppleAIIssue(providerResult) : "",
+            fallbackUsed: Boolean(providerResult?.fallbackUsed),
             ok: true,
             provider,
             taskKey: opts?.taskKey || "",

@@ -31,7 +31,9 @@ final class FoundationModelBridge: NSObject, WKScriptMessageHandler {
                 fallbackUsed: true,
                 ok: false,
                 provider: "apple-foundation",
+                recoverySuggestion: "The native WebKit bridge could not decode the Apple AI request. Reload the native app and retry.",
                 requestId: "unknown",
+                taskKey: nil,
                 text: "",
                 tokenBudget: nil
             )
