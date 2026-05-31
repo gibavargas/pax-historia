@@ -6,6 +6,7 @@ final class NativeCampaignStore: ObservableObject {
     @Published private(set) var state: NativeCampaignState?
     @Published var draftAction = ""
     @Published private(set) var isAdvancing = false
+    @Published private(set) var isLoadingSuggestions = false
     @Published private(set) var lastError: String?
 
     private let defaults: UserDefaults
@@ -38,6 +39,7 @@ final class NativeCampaignStore: ObservableObject {
             defaults.set(data, forKey: Self.selectedCountryKey)
         }
         persistState()
+        Task { await refreshSuggestedActions(force: true) }
     }
 
     func resetSelection() {
@@ -60,6 +62,26 @@ final class NativeCampaignStore: ObservableObject {
         persistState()
     }
 
+    func addSuggestedAction(_ suggestion: NativeSuggestedAction) {
+        guard var state else { return }
+        let detail = suggestion.detail.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !detail.isEmpty else { return }
+
+        let action = NativePlannedAction(
+            createdAt: state.gameDate,
+            detail: detail,
+            id: "action-\(UUID().uuidString.lowercased())",
+            resolvedAt: nil,
+            status: .planned,
+            title: suggestion.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+        state.plannedActions.insert(action, at: 0)
+        state.suggestedActions.removeAll { $0.id == suggestion.id }
+        state.lastSummary = "\(action.title) foi aceito como ordem planejada. O Apple Foundation Model resolverá seu impacto no próximo salto temporal."
+        self.state = state
+        persistState()
+    }
+
     func deleteActions(at offsets: IndexSet) {
         guard var state else { return }
         for index in offsets.sorted(by: >) where state.plannedActions.indices.contains(index) {
@@ -71,8 +93,7 @@ final class NativeCampaignStore: ObservableObject {
 
     func checkAppleStatus() async {
         guard var state else { return }
-        let response = await aiService.checkReadiness()
-        state.aiReadiness = NativeAIReadiness(response: response)
+        state.aiReadiness = await aiService.checkReadiness()
         self.state = state
         persistState()
     }
@@ -84,17 +105,50 @@ final class NativeCampaignStore: ObservableObject {
         lastError = nil
         defer { isAdvancing = false }
 
-        let response = await aiService.generateTurn(for: currentState, months: months)
-        let generated = NativeGameEngine.generatedTurn(from: response.text, fallbackState: currentState, months: months)
-        currentState = NativeGameEngine.apply(
-            generated,
-            to: currentState,
-            months: months,
-            aiResponse: response
-        )
+        do {
+            let generated = try await aiService.generateTurn(for: currentState, months: months)
+            currentState = NativeGameEngine.apply(
+                generated,
+                to: currentState,
+                months: months
+            )
 
-        state = currentState
-        persistState()
+            state = currentState
+            persistState()
+            await refreshSuggestedActions(force: true)
+        } catch {
+            currentState.aiReadiness = .failure(error)
+            state = currentState
+            lastError = error.localizedDescription
+            persistState()
+        }
+    }
+
+    func refreshSuggestedActionsIfNeeded() async {
+        guard let state, state.suggestedActions.isEmpty else { return }
+        await refreshSuggestedActions(force: false)
+    }
+
+    func refreshSuggestedActions(force: Bool) async {
+        guard var currentState = state, !isLoadingSuggestions else { return }
+        guard force || currentState.suggestedActions.isEmpty else { return }
+
+        isLoadingSuggestions = true
+        lastError = nil
+        defer { isLoadingSuggestions = false }
+
+        do {
+            let suggestions = try await aiService.generateSuggestedActions(for: currentState)
+            currentState.suggestedActions = suggestions
+            currentState.aiReadiness = .available(tokenBudget: "sliced-guided-generation context=4096, suggestions=4x180")
+            state = currentState
+            persistState()
+        } catch {
+            currentState.aiReadiness = .failure(error)
+            state = currentState
+            lastError = error.localizedDescription
+            persistState()
+        }
     }
 
     private func persistState() {

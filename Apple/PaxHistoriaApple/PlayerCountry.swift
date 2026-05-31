@@ -14,7 +14,7 @@ enum CountryCatalog {
         .map { pair in
             PlayerCountry(
                 code: pair.alpha3,
-                name: displayName(for: pair.alpha2, fallback: pair.alpha3)
+                name: displayName(for: pair.alpha2, defaultName: pair.alpha3)
             )
         }
         .sorted { left, right in
@@ -23,12 +23,12 @@ enum CountryCatalog {
 
     private static let displayLocale = Locale(identifier: "en_US")
 
-    private static func displayName(for alpha2: String, fallback: String) -> String {
+    private static func displayName(for alpha2: String, defaultName: String) -> String {
         if alpha2 == "XK" {
             return "Kosovo"
         }
 
-        return displayLocale.localizedString(forRegionCode: alpha2) ?? fallback
+        return displayLocale.localizedString(forRegionCode: alpha2) ?? defaultName
     }
 }
 

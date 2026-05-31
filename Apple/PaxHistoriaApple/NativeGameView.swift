@@ -1,3 +1,4 @@
+import MapKit
 import SwiftUI
 
 struct NativeGameView: View {
@@ -11,7 +12,11 @@ struct NativeGameView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
                         header(for: state)
+                        NativeWorldMap(state: state)
                         metricsGrid(for: state)
+                        if let error = store.lastError, !error.isEmpty {
+                            ErrorBanner(message: error)
+                        }
                         actionComposer
                         timeline(for: state)
                     }
@@ -19,6 +24,9 @@ struct NativeGameView: View {
                     .frame(maxWidth: 1120, alignment: .leading)
                 }
                 .background(.black.opacity(0.92))
+                .task(id: "\(state.country.code)-\(state.round)") {
+                    await store.refreshSuggestedActionsIfNeeded()
+                }
             } else {
                 ContentUnavailableView("No campaign loaded", systemImage: "globe", description: Text("Choose a country to begin."))
             }
@@ -68,6 +76,14 @@ struct NativeGameView: View {
                     advanceButton(months: 12, title: "1 year")
                 }
 
+                Button {
+                    Task { await store.refreshSuggestedActions(force: true) }
+                } label: {
+                    Label("Suggest actions", systemImage: "sparkles")
+                }
+                .buttonStyle(.bordered)
+                .disabled(store.isLoadingSuggestions)
+
                 Spacer()
 
                 Button(role: .destructive) {
@@ -115,6 +131,8 @@ struct NativeGameView: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
 
+            suggestedActions
+
             TextEditor(text: $store.draftAction)
                 .frame(minHeight: 88)
                 .padding(8)
@@ -146,6 +164,47 @@ struct NativeGameView: View {
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
+    private var suggestedActions: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Label("Apple-suggested actions", systemImage: "sparkles")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                Spacer()
+                if store.isLoadingSuggestions {
+                    ProgressView()
+                        .controlSize(.small)
+                } else {
+                    Button {
+                        Task { await store.refreshSuggestedActions(force: true) }
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel("Refresh Apple-suggested actions")
+                }
+            }
+
+            if let state = store.state, !state.suggestedActions.isEmpty {
+                ForEach(state.suggestedActions) { suggestion in
+                    SuggestedActionRow(suggestion: suggestion) {
+                        store.addSuggestedAction(suggestion)
+                    }
+                }
+            } else if store.isLoadingSuggestions {
+                Text("Asking Apple Foundation Models for concrete orders...")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text("No suggestions yet. Use refresh to ask Apple Foundation Models.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(12)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
     private func timeline(for state: NativeCampaignState) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Events")
@@ -169,7 +228,7 @@ struct NativeGameView: View {
             }
         }
         .buttonStyle(.borderedProminent)
-        .disabled(store.isAdvancing)
+        .disabled(store.isAdvancing || store.isLoadingSuggestions)
         .accessibilityIdentifier("native-advance-\(months)")
     }
 
@@ -207,6 +266,100 @@ struct NativeGameView: View {
     }
 }
 
+private struct NativeWorldMap: View {
+    let state: NativeCampaignState
+
+    private let coordinate: CLLocationCoordinate2D
+    private let region: MKCoordinateRegion
+
+    init(state: NativeCampaignState) {
+        self.state = state
+        coordinate = CountryCoordinate.center(for: state.country.code)
+        let span = state.country.code == "ATA"
+            ? MKCoordinateSpan(latitudeDelta: 80, longitudeDelta: 160)
+            : MKCoordinateSpan(latitudeDelta: 34, longitudeDelta: 48)
+        region = MKCoordinateRegion(center: coordinate, span: span)
+    }
+
+    var body: some View {
+        Map(initialPosition: .region(region)) {
+            Marker(state.country.name, systemImage: "flag.fill", coordinate: coordinate)
+        }
+        .mapStyle(.standard(elevation: .realistic))
+        .frame(minHeight: 300)
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(alignment: .topLeading) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Strategic Map")
+                    .font(.caption)
+                    .fontWeight(.bold)
+                    .textCase(.uppercase)
+                    .tracking(1.6)
+                Text("\(state.country.name) focus · \(state.worldTension)/100 world tension")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(12)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .padding(12)
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(.white.opacity(0.12), lineWidth: 1)
+        }
+        .accessibilityIdentifier("native-strategic-map")
+    }
+}
+
+private enum CountryCoordinate {
+    static func center(for code: String) -> CLLocationCoordinate2D {
+        let pair = centroids[code.uppercased()] ?? (20.0, 0.0)
+        return CLLocationCoordinate2D(latitude: pair.0, longitude: pair.1)
+    }
+
+    private static let centroids: [String: (Double, Double)] = [
+        "ARG": (-38.4, -63.6),
+        "AUS": (-25.3, 133.8),
+        "BRA": (-10.3, -53.2),
+        "CAN": (56.1, -106.3),
+        "CHN": (35.9, 104.2),
+        "DEU": (51.2, 10.4),
+        "EGY": (26.8, 30.8),
+        "ESP": (40.5, -3.7),
+        "FRA": (46.2, 2.2),
+        "GBR": (55.4, -3.4),
+        "IND": (20.6, 78.9),
+        "IDN": (-2.5, 118.0),
+        "IRN": (32.4, 53.7),
+        "ITA": (41.9, 12.6),
+        "JPN": (36.2, 138.3),
+        "KOR": (36.5, 127.9),
+        "MEX": (23.6, -102.5),
+        "NGA": (9.1, 8.7),
+        "RUS": (61.5, 105.3),
+        "SAU": (23.9, 45.1),
+        "TUR": (39.0, 35.2),
+        "UKR": (48.4, 31.2),
+        "USA": (39.8, -98.6),
+        "ZAF": (-30.6, 22.9),
+    ]
+}
+
+private struct ErrorBanner: View {
+    let message: String
+
+    var body: some View {
+        Label(message, systemImage: "exclamationmark.triangle.fill")
+            .font(.callout)
+            .foregroundStyle(.red)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.red.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .accessibilityIdentifier("native-apple-error")
+    }
+}
+
 private struct MetricCard: View {
     let title: String
     let value: String
@@ -229,6 +382,43 @@ private struct MetricCard: View {
         }
         .padding()
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+}
+
+private struct SuggestedActionRow: View {
+    let suggestion: NativeSuggestedAction
+    let onUse: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(suggestion.title)
+                        .fontWeight(.semibold)
+                    Text(suggestion.urgency.capitalized)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button {
+                    onUse()
+                } label: {
+                    Label("Use", systemImage: "plus.circle")
+                }
+                .buttonStyle(.bordered)
+            }
+
+            Text(suggestion.detail)
+                .font(.caption)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text(suggestion.rationale)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(10)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }
 

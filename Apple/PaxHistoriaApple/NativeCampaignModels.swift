@@ -7,6 +7,7 @@ struct NativeCampaignState: Codable, Hashable {
     var lastSummary: String
     var plannedActions: [NativePlannedAction]
     var round: Int
+    var suggestedActions: [NativeSuggestedAction]
     var stability: Int
     var startDate: String
     var timeline: [NativeCampaignEvent]
@@ -26,6 +27,14 @@ struct NativePlannedAction: Codable, Hashable, Identifiable {
 enum NativeActionStatus: String, Codable, Hashable {
     case planned
     case resolved
+}
+
+struct NativeSuggestedAction: Codable, Hashable, Identifiable {
+    var detail: String
+    var id: String
+    var rationale: String
+    var title: String
+    var urgency: String
 }
 
 struct NativeCampaignEvent: Codable, Hashable, Identifiable {
@@ -80,7 +89,6 @@ enum NativeStrategicTrack: String, Codable, CaseIterable, Hashable, Identifiable
 struct NativeAIReadiness: Codable, Hashable {
     var availability: String
     var checkedAt: String
-    var fallbackUsed: Bool
     var lastError: String
     var ok: Bool
     var recoverySuggestion: String
@@ -89,7 +97,6 @@ struct NativeAIReadiness: Codable, Hashable {
     static let notChecked = NativeAIReadiness(
         availability: "not-checked",
         checkedAt: "",
-        fallbackUsed: false,
         lastError: "",
         ok: false,
         recoverySuggestion: "",
@@ -99,7 +106,6 @@ struct NativeAIReadiness: Codable, Hashable {
     init(
         availability: String,
         checkedAt: String,
-        fallbackUsed: Bool,
         lastError: String,
         ok: Bool,
         recoverySuggestion: String,
@@ -107,21 +113,77 @@ struct NativeAIReadiness: Codable, Hashable {
     ) {
         self.availability = availability
         self.checkedAt = checkedAt
-        self.fallbackUsed = fallbackUsed
         self.lastError = lastError
         self.ok = ok
         self.recoverySuggestion = recoverySuggestion
         self.tokenBudget = tokenBudget
     }
 
-    init(response: AppleAIResponse) {
-        availability = response.availability
-        checkedAt = NativeGameEngine.todayStamp()
-        fallbackUsed = response.fallbackUsed
-        lastError = response.error ?? ""
-        ok = response.ok
-        recoverySuggestion = response.recoverySuggestion ?? ""
-        tokenBudget = response.tokenBudget ?? ""
+    static func available(tokenBudget: String) -> NativeAIReadiness {
+        NativeAIReadiness(
+            availability: "available",
+            checkedAt: NativeGameEngine.todayStamp(),
+            lastError: "",
+            ok: true,
+            recoverySuggestion: "",
+            tokenBudget: tokenBudget
+        )
+    }
+
+    static func failure(_ error: Error) -> NativeAIReadiness {
+        NativeAIReadiness(
+            availability: "apple-foundation-error",
+            checkedAt: NativeGameEngine.todayStamp(),
+            lastError: error.localizedDescription,
+            ok: false,
+            recoverySuggestion: "Apple Foundation Models did not complete this request. The game did not use a deterministic substitute.",
+            tokenBudget: "context=4096"
+        )
+    }
+
+    static func unavailable(_ reason: String) -> NativeAIReadiness {
+        NativeAIReadiness(
+            availability: reason,
+            checkedAt: NativeGameEngine.todayStamp(),
+            lastError: reason,
+            ok: false,
+            recoverySuggestion: "Enable Apple Intelligence and make sure the local model is ready. Pax Historia will not simulate turns without Apple Foundation Models.",
+            tokenBudget: "context=4096"
+        )
+    }
+}
+
+enum NativeFoundationModelError: LocalizedError {
+    case unsupportedOS
+    case modelUnavailable(String)
+    case generationFailed(String)
+    case invalidGeneratedTurn(String)
+    case invalidSuggestedActions(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .unsupportedOS:
+            return "This OS does not expose the FoundationModels framework required by the native game."
+        case .modelUnavailable(let reason):
+            return "Apple Foundation Models are unavailable: \(reason)."
+        case .generationFailed(let reason):
+            return "Apple Foundation Models generation failed: \(reason)."
+        case .invalidGeneratedTurn(let reason):
+            return "Apple Foundation Models returned an invalid turn: \(reason)."
+        case .invalidSuggestedActions(let reason):
+            return "Apple Foundation Models returned invalid suggested actions: \(reason)."
+        }
+    }
+}
+
+enum NativeGameEngineError: LocalizedError {
+    case invalidTurn(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidTurn(let reason):
+            return "The generated turn could not be applied: \(reason)."
+        }
     }
 }
 
