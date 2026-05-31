@@ -254,6 +254,12 @@ final class AppleFoundationModelResponder {
         }
 
         switch request.taskKey {
+        case "nativeStatusCheck":
+            return "ready"
+        case "nativeJumpForward":
+            return """
+            {"summary":"The native deterministic simulator advanced the campaign because Apple Foundation Models were not available for this request.","stabilityDelta":-1,"worldTensionDelta":2,"events":[{"date":"","title":"External pressure reshapes the strategic environment","description":"Independent actors adjust energy, security, and diplomatic positions. The development does not revolve around the player, but it changes the costs and incentives that future orders must account for.","id":"native-fallback-world-event","importance":"major","kind":"world","linkedActionIDs":[],"notable":true,"playerRelated":false,"strategicEffects":[{"date":"","eventId":"native-fallback-world-event","id":"native-fallback-world-event-effect","magnitude":2,"summary":"Background tension rises and constrains future diplomatic room.","target":"International system","track":"world-tension"}]}]}
+            """
         case "actions":
             return """
             {"topics":[{"title":"Stabilize the position","description":"Keep the state playable while the on-device model is unavailable.","actions":[{"kind":"action","title":"Review the current position","text":"Audit diplomacy, internal stability, military readiness, and economic reserves before committing to the next major move."}]}]}
