@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Map from "./Game/Map/World.jsx";
 import UI from "./Game/GameUI/main.jsx";
 import StartupScreen from "./runtime/StartupScreen.jsx";
+import ErrorBoundary from "./runtime/ErrorBoundary.jsx";
 import {
   STARTUP_TIME_BUDGET_MS,
   createInitialStartupState,
@@ -153,6 +154,7 @@ function App() {
   }, [hasFirstWorldIdle, isReady, startupState]);
 
   return (
+    <ErrorBoundary>
     <>
     <div style={WorldShell}>
     <Map
@@ -176,6 +178,7 @@ function App() {
     )}
     {!isReady && <StartupScreen {...startupOverlayState} />}
     </>
+    </ErrorBoundary>
   );
 }
 

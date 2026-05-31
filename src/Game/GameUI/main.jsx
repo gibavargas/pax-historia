@@ -2,6 +2,7 @@ import React, { Suspense, lazy, useCallback, useEffect, useState } from "react";
 import { SettingsButton, SettingsMenu } from "./settings";
 import { LibraryTopBar, TOP_BAR_OFFSET } from "./libraryBar";
 import { DateWidget } from "./time";
+import { GameStatusStrip } from "./GameStatusStrip.jsx";
 import { Other } from "./other";
 import { Toolbar } from "./chat";
 import { Search } from "./search";
@@ -97,7 +98,7 @@ const WebGLWarningPopup = () => (
 const AdvisorButton = ({ isAdvisorOpen, rightShift, onToggle }) => (
   <button onClick={onToggle} style={{
     ...baseStyle,
-    bottom: "0.5rem", right: rightShift,
+    bottom: "calc(env(safe-area-inset-bottom, 0px) + 0.5rem)", right: rightShift,
     height: "4rem", width: "4rem",
     cursor: "pointer", fontSize: "1.5rem",
     transition: "right 0.35s cubic-bezier(0.4, 0, 0.2, 1)",
@@ -171,7 +172,13 @@ const Main = ({
     setIsAdvisorOpen(true);
   }, []);
 
-  const rightShift = isAdvisorOpen ? `calc(${ADVISOR_PANEL_WIDTH} + 0.5rem)` : "0.5rem";
+  const openActions = useCallback(() => {
+    setActiveBottomPanel("actions");
+  }, []);
+
+  const rightShift = isAdvisorOpen
+    ? `calc(env(safe-area-inset-right, 0px) + ${ADVISOR_PANEL_WIDTH} + 0.5rem)`
+    : "calc(env(safe-area-inset-right, 0px) + 0.5rem)";
   const toggleBottomPanel = useCallback((panelName) => {
     setActiveBottomPanel((currentPanel) => (
       currentPanel === panelName ? null : panelName
@@ -188,6 +195,11 @@ const Main = ({
         onSetPanel={setActiveBottomPanel}
         onTogglePanel={toggleBottomPanel}
         rightShift={rightShift}
+        topOffset={TOP_BAR_OFFSET}
+      />
+      <GameStatusStrip
+        onOpenActions={openActions}
+        onOpenAdvisor={openAdvisor}
         topOffset={TOP_BAR_OFFSET}
       />
       <Toolbar

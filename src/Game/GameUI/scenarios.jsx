@@ -221,7 +221,7 @@ const ScenarioCard = ({
           background:
             `linear-gradient(180deg, rgba(0,0,0,0.02) 0%, rgba(0,0,0,0.72) 100%), ` +
             `radial-gradient(circle at 14% 18%, ${scenario.accentColor}bb, transparent 34%), ` +
-            "url('/loading_screen.jpg') center/cover",
+            "url('./loading_screen.jpg') center/cover",
           inset: 0,
           opacity: 0.92,
           position: "absolute",
@@ -951,7 +951,7 @@ const ScenarioTopBar = () => {
               width: "2.65rem",
             }}
           >
-            <img alt="Pax Historia" src="/logo.png" style={{ height: "1.7rem", width: "1.7rem" }} />
+            <img alt="Pax Historia" src="./logo.png" style={{ height: "1.7rem", width: "1.7rem" }} />
           </div>
           <div style={{ minWidth: 0 }}>
             <div style={{ color: "#fff", fontSize: "1rem", fontWeight: 800, letterSpacing: "-0.03em" }}>

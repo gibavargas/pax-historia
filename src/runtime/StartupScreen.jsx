@@ -37,7 +37,7 @@ const StartupScreen = ({
         height: 100vh;
         overflow: hidden;
         background: #050403;
-        background-image: url('/loading_screen.jpg');
+        background-image: url('./loading_screen.jpg');
         background-size: cover;
         background-position: center top;
         font-family: 'EB Garamond', Georgia, serif;
@@ -322,7 +322,7 @@ const StartupScreen = ({
       {/* Title row */}
       <div className="ss-top-row">
       <div className="ss-identity">
-      <img className="ss-logo" src="/logo.png" alt="Pax Historia" />
+      <img className="ss-logo" src="./logo.png" alt="Pax Historia" />
       <div className="ss-title-block">
       <div className="ss-game-name">Pax Historia</div>
       <div className="ss-title">

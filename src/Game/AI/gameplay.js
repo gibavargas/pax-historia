@@ -1,5 +1,13 @@
 import dayjs from "dayjs";
 import { callAI } from "./main.jsx";
+import { APPLE_FOUNDATION_PROVIDER, getStoredProvider } from "./providerConfig.js";
+import { recordAIFallback } from "./aiHealth.js";
+import {
+  clampPromptTextToTokenBudget,
+  estimateTokenCount,
+  resolveJsonPayloadOrFallback,
+  splitTextByTokenBudget,
+} from "./harness.js";
 import {
   GAMEPLAY_PROMPT_DEFAULTS,
   normalizePromptPack,
@@ -57,6 +65,31 @@ const CHAT_HINT_PATTERNS = [
   /\bдоговор/i,
 ];
 
+const APPLE_CHUNKED_TASKS = new Set([
+  "actions",
+  "autoJumpForward",
+  "catalystCreation",
+  "descriptionToAction",
+  "gameMaster",
+  "jumpForward",
+]);
+
+const APPLE_LONG_CONTEXT_KEYS = [
+  "advisorMessages",
+  "allActions",
+  "chatHistory",
+  "chatHistoryLong",
+  "chatsToConsolidate",
+  "eventsToConsolidate",
+  "plannedActions",
+  "recentEvents",
+  "recentEventsLong",
+  "simulationRules",
+  "worldBeforeRoundOne",
+  "worldSummary",
+  "worldSummaryNoCity",
+];
+
 const DEFAULT_SUGGESTION_TOPICS = [
   {
     title: "Stabilize the domestic front",
@@ -94,44 +127,97 @@ const sentenceCase = (value) => {
   return `${text.charAt(0).toUpperCase()}${text.slice(1)}`;
 };
 
-const maybeJsonParse = (value) => {
-  try {
-    return JSON.parse(value);
-  } catch {
-    return null;
-  }
-};
-
-const extractJsonPayload = (rawText) => {
-  const direct = maybeJsonParse(rawText);
-  if (direct) return direct;
-
-  const fencedMatch = rawText.match(/```json\s*([\s\S]*?)```/i);
-  if (fencedMatch?.[1]) {
-    const parsed = maybeJsonParse(fencedMatch[1].trim());
-    if (parsed) return parsed;
-  }
-
-  const objectMatch = rawText.match(/\{[\s\S]*\}/);
-  if (objectMatch?.[0]) {
-    const parsed = maybeJsonParse(objectMatch[0]);
-    if (parsed) return parsed;
-  }
-
-  const arrayMatch = rawText.match(/\[[\s\S]*\]/);
-  if (arrayMatch?.[0]) {
-    const parsed = maybeJsonParse(arrayMatch[0]);
-    if (parsed) return parsed;
-  }
-
-  return null;
-};
-
 const renderTemplate = (template, variables) =>
   String(template ?? "").replace(/\$\{([^}]+)\}/g, (_match, key) => {
     const value = variables[key];
     return value == null ? "" : String(value);
   });
+
+const deterministicContextSummary = (text, { maxLines = 8 } = {}) => {
+  const lines = normalizeString(text)
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (lines.length === 0) return "";
+  return lines.slice(0, maxLines).join("\n");
+};
+
+const summarizeContextChunk = async ({ chunk, index, key, taskKey, total }) => {
+  const chunkLabel = `${key} chunk ${index + 1}/${total}`;
+  const prompt = [
+    "Condense this Pax Historia strategy-game context for a later 4096-token Apple Foundation Models request.",
+    "Preserve dates, actors, map changes, player orders, unresolved conflicts, and severe world events.",
+    "Do not add facts. Return JSON only: {\"summary\":\"\"}.",
+    "",
+    chunk,
+  ].join("\n");
+
+  try {
+    const raw = await withTimeout(
+      callAI("You compress strategy-game context into compact factual notes.", [
+        { role: "user", parts: [{ text: prompt }] },
+      ], {
+        allowCircuitBreaker: false,
+        maxTokens: 180,
+        responseFormat: "json",
+        taskKey: `${taskKey}:contextSummary`,
+        userMessage: `Summarize ${chunkLabel}.`,
+      }),
+      8000,
+      `Context summarization timed out for ${chunkLabel}.`,
+    );
+    const result = resolveJsonPayloadOrFallback({
+      fallback: () => ({ summary: deterministicContextSummary(chunk, { maxLines: 5 }) }),
+      rawText: raw,
+    });
+
+    return normalizeString(result.payload?.summary) || deterministicContextSummary(chunk, { maxLines: 5 });
+  } catch (error) {
+    recordAIFallback({
+      provider: getStoredProvider(),
+      reason: `Context chunk fallback for ${chunkLabel}: ${error?.message || error}`,
+      taskKey: `${taskKey}:contextSummary`,
+    });
+    return deterministicContextSummary(chunk, { maxLines: 5 });
+  }
+};
+
+const compactVariablesForApple = async (taskKey, variables) => {
+  if (getStoredProvider() !== APPLE_FOUNDATION_PROVIDER || !APPLE_CHUNKED_TASKS.has(taskKey)) {
+    return variables;
+  }
+
+  const compacted = { ...variables };
+
+  for (const key of APPLE_LONG_CONTEXT_KEYS) {
+    const value = compacted[key];
+    const text = typeof value === "string" ? value : "";
+    if (!text || estimateTokenCount(text) <= 700) {
+      continue;
+    }
+
+    const chunks = splitTextByTokenBudget(text, 950, 5);
+    const summaries = [];
+
+    for (let index = 0; index < chunks.length; index += 1) {
+      summaries.push(await summarizeContextChunk({
+        chunk: chunks[index],
+        index,
+        key,
+        taskKey,
+        total: chunks.length,
+      }));
+    }
+
+    compacted[key] = [
+      `[Condensed ${key} from about ${estimateTokenCount(text)} tokens into ${summaries.length} chunk summaries for Apple's 4096-token window.]`,
+      ...summaries,
+    ].join("\n");
+  }
+
+  return compacted;
+};
 
 const loadPromptCatalog = async ({ force = false } = {}) =>
   normalizePromptPack(await readJson(JSON_URLS.prompts, { defaultValue: {}, force }));
@@ -502,24 +588,53 @@ const withTimeout = async (promise, timeoutMs, timeoutMessage) => {
 
 const runJsonTask = async (taskKey, { fallback, timeoutMs = 12000, userMessage, variables }) => {
   const prompts = await loadPromptCatalog();
-  const helperValues = resolveHelperValues(prompts.helpers, variables);
-  const systemPrompt = renderTemplate(prompts.tasks[taskKey], {
-    ...variables,
+  const taskVariables = await compactVariablesForApple(taskKey, variables);
+  const helperValues = resolveHelperValues(prompts.helpers, taskVariables);
+  let systemPrompt = renderTemplate(prompts.tasks[taskKey], {
+    ...taskVariables,
     ...helperValues,
   });
 
+  if (getStoredProvider() === APPLE_FOUNDATION_PROVIDER) {
+    systemPrompt = clampPromptTextToTokenBudget(
+      systemPrompt,
+      2200,
+      "[Final task prompt trimmed after chunked context summarization.]",
+    );
+  }
+
   try {
     const raw = await withTimeout(
-      callAI(systemPrompt, [{ role: "user", parts: [{ text: userMessage }] }]),
+      callAI(systemPrompt, [{ role: "user", parts: [{ text: userMessage }] }], {
+        responseFormat: "json",
+        taskKey,
+        userMessage,
+      }),
       timeoutMs,
       `AI task "${taskKey}" timed out.`,
     );
-    const parsed = extractJsonPayload(raw);
-    if (parsed) {
-      return parsed;
+
+    const result = resolveJsonPayloadOrFallback({
+      fallback,
+      rawText: raw,
+      taskKey,
+    });
+
+    if (result.fallbackUsed) {
+      recordAIFallback({
+        provider: getStoredProvider(),
+        reason: `AI task "${taskKey}" returned invalid JSON.`,
+        taskKey,
+      });
     }
+
+    return result.payload;
   } catch {
-    // Fall through to deterministic fallback.
+    recordAIFallback({
+      provider: getStoredProvider(),
+      reason: `AI task "${taskKey}" failed and used deterministic fallback.`,
+      taskKey,
+    });
   }
 
   return fallback();
@@ -704,8 +819,27 @@ const fallbackJumpSimulation = async ({ bundle, days, mode, targetDate }) => {
   const plannedActions = normalizeActions(bundle.actions).filter((action) => action.status === "planned");
   const firstThreeActions = plannedActions.slice(0, 3);
   const events = [];
+  const ambientDate = dayjs(bundle.game.gameDate)
+    .add(Math.max(1, Math.round(Math.max(days, 1) / 3)), "day")
+    .format("YYYY-MM-DD");
 
   if (firstThreeActions.length > 0) {
+    events.push({
+      date: ambientDate,
+      description:
+        "Foreign cabinets, lenders, and general staffs adjust to the wider balance of power, creating pressure that may matter later even without a direct immediate effect on the player.",
+      impacts: {
+        createdChats: [],
+        polityChanges: [],
+        regionTransfers: [],
+      },
+      importance: "minor",
+      kind: "world",
+      notable: false,
+      playerRelated: false,
+      title: "The wider balance shifts outside the player's direct control",
+    });
+
     firstThreeActions.forEach((action, index) => {
       const eventDate = dayjs(bundle.game.gameDate)
         .add(Math.max(1, Math.round(((index + 1) / (firstThreeActions.length + 1)) * Math.max(days, 1))), "day")
@@ -786,6 +920,64 @@ const fallbackJumpSimulation = async ({ bundle, days, mode, targetDate }) => {
         ? `${bundle.game.country} moves from planning into execution, and the world begins adjusting to the turn's most concrete orders.`
         : `Time advances without a direct order from ${bundle.game.country}, but the wider system keeps shifting and building pressure.`,
   };
+};
+
+const eventMentionsPlayer = (event, playerCountry) => {
+  const player = normalizeString(playerCountry).toLowerCase();
+  if (!player) return false;
+  const text = `${event?.title || ""} ${event?.description || ""}`.toLowerCase();
+  return text.includes(player);
+};
+
+const normalizeEventRelevance = (event, { playerCountry }) => {
+  if (!event) return event;
+  const kind = normalizeString(event.kind).toLowerCase();
+  const directImpact =
+    event.impacts.regionTransfers.length > 0 ||
+    event.impacts.polityChanges.length > 0 ||
+    event.impacts.createdChats.length > 0 ||
+    event.impacts.actionIds.length > 0;
+
+  if (event.playerRelated && kind === "world" && !directImpact && !eventMentionsPlayer(event, playerCountry)) {
+    return {
+      ...event,
+      playerRelated: false,
+    };
+  }
+
+  return event;
+};
+
+const createAmbientWorldEvent = ({ baseDate, days }) => ({
+  date: dayjs(baseDate).add(Math.max(1, Math.round(Math.max(days, 1) / 2)), "day").format("YYYY-MM-DD"),
+  description:
+    "Markets, ministries, and regional commanders outside the player's immediate sphere respond to the changing international climate. The development adds texture to the world without forcing every consequence to orbit the player.",
+  impacts: {
+    createdChats: [],
+    polityChanges: [],
+    regionTransfers: [],
+  },
+  importance: "minor",
+  kind: "world",
+  notable: false,
+  playerRelated: false,
+  title: "Independent world currents continue",
+});
+
+const enforceWorldEventRealism = (events, { baseDate, days, playerCountry }) => {
+  const normalizedEvents = normalizeArray(events)
+    .map((entry, index) => normalizeGeneratedEvent(entry, index))
+    .filter(Boolean)
+    .map((event) => normalizeEventRelevance(event, { playerCountry }));
+
+  if (normalizedEvents.length >= 2 && !normalizedEvents.some((event) => !event.playerRelated)) {
+    return [
+      createAmbientWorldEvent({ baseDate, days }),
+      ...normalizedEvents,
+    ];
+  }
+
+  return normalizedEvents;
 };
 
 const normalizeGeneratedEvent = (entry, index = 0) => {
@@ -1168,7 +1360,11 @@ export const simulateTimelineJump = async ({ days, mode = "jump" } = {}) => {
   const result = {
     catalyst: payload?.catalyst ?? null,
     clearActions: payload?.clearActions !== false,
-    events: normalizeArray(payload?.events),
+    events: enforceWorldEventRealism(payload?.events, {
+      baseDate: bundle.game.gameDate,
+      days: safeDays,
+      playerCountry: bundle.game.country,
+    }),
     mode,
     stopDate: normalizeString(payload?.stopDate) || targetDate,
     summary: normalizeString(payload?.summary),

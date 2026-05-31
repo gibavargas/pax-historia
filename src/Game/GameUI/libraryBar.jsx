@@ -27,7 +27,7 @@ import {
 } from "../../runtime/library.js";
 
 const BAR_HEIGHT = 64;
-const TOP_BAR_OFFSET = "4.75rem";
+const TOP_BAR_OFFSET = "calc(env(safe-area-inset-top, 0px) + 4.75rem)";
 
 const surfaceStyle = {
   background:
@@ -332,7 +332,7 @@ const ScenarioCard = ({ onClone, onEdit, onPlay, onSelect, scenario, selected })
   const assetBadges = Object.entries(scenarioBadgeLabels)
     .filter(([key]) => scenario.assetStatus?.[key])
     .map(([, label]) => label.replace(" PMTiles", "").replace(" JSON", ""));
-  const cardImageUrl = scenario.coverImageUrl || "/loading_screen.jpg";
+  const cardImageUrl = scenario.coverImageUrl || "./loading_screen.jpg";
 
   return (
     <div
@@ -482,7 +482,7 @@ const ScenarioCard = ({ onClone, onEdit, onPlay, onSelect, scenario, selected })
 };
 
 const GameCard = ({ active, game, onActivate, onClone, onEdit }) => {
-  const cardImageUrl = game.coverImageUrl || "/loading_screen.jpg";
+  const cardImageUrl = game.coverImageUrl || "./loading_screen.jpg";
 
   return (
     <div
@@ -1306,13 +1306,13 @@ const LibraryTopBar = () => {
           padding: "0 1rem",
           position: "fixed",
           right: 0,
-          top: 0,
+          top: "env(safe-area-inset-top, 0px)",
           zIndex: 10030,
         }}
       >
         <div style={{ alignItems: "center", display: "flex", gap: "0.8rem", minWidth: 0 }}>
           <div style={{ alignItems: "center", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: "999px", display: "flex", height: "2.65rem", justifyContent: "center", overflow: "hidden", width: "2.65rem" }}>
-            <img alt="Pax Historia" src="/logo.png" style={{ height: "1.7rem", width: "1.7rem" }} />
+            <img alt="Pax Historia" src="./logo.png" style={{ height: "1.7rem", width: "1.7rem" }} />
           </div>
           <div style={{ minWidth: 0 }}>
             <div style={{ color: "#fff", fontSize: "1rem", fontWeight: 800, letterSpacing: "-0.03em" }}>

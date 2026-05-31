@@ -1,5 +1,13 @@
 import mapLibreGl from "maplibre-gl";
 import { PMTiles, Protocol, SharedPromiseCache } from "pmtiles";
+import {
+  isAppleNativeHost,
+  isNativeJsonUrl,
+  makeNativeJsonUrl,
+  readNativeJson,
+  resolveBundledAssetUrl,
+  writeNativeJson,
+} from "./nativeHost.js";
 
 const { addProtocol, setMaxParallelImageRequests, setWorkerCount } = mapLibreGl;
 
@@ -82,6 +90,26 @@ let vectorTileModulesPromise = null;
 
 export const setRuntimeAssetEndpoints = ({ token = "" } = {}) => {
   runtimeAssetToken = String(token ?? "").trim();
+
+  if (isAppleNativeHost()) {
+    JSON_URLS.advisor = makeNativeJsonUrl("advisor");
+    JSON_URLS.actions = makeNativeJsonUrl("actions");
+    JSON_URLS.chat = makeNativeJsonUrl("chat");
+    JSON_URLS.colors = makeNativeJsonUrl("colors");
+    JSON_URLS.events = makeNativeJsonUrl("events");
+    JSON_URLS.game = makeNativeJsonUrl("game");
+    JSON_URLS.prompts = makeNativeJsonUrl("prompts");
+    JSON_URLS.world = makeNativeJsonUrl("world");
+
+    PMTILES_ARCHIVES.cities = resolveBundledAssetUrl("saves/save0/cities.pmtiles");
+    PMTILES_ARCHIVES.countries = resolveBundledAssetUrl("saves/save0/countries.pmtiles");
+    PMTILES_ARCHIVES.regions = resolveBundledAssetUrl("saves/save0/regions.pmtiles");
+
+    PMTILES_PROTOCOL_URLS.cities = `pmtiles://${PMTILES_ARCHIVES.cities}`;
+    PMTILES_PROTOCOL_URLS.countries = `pmtiles://${PMTILES_ARCHIVES.countries}`;
+    PMTILES_PROTOCOL_URLS.regions = `pmtiles://${PMTILES_ARCHIVES.regions}`;
+    return;
+  }
 
   JSON_URLS.advisor = withRuntimeToken("/api/runtime/json/advisor");
   JSON_URLS.actions = withRuntimeToken("/api/runtime/json/actions");
@@ -223,6 +251,10 @@ export const ensurePmtilesProtocol = () => {
 };
 
 export const readJson = async (url, { defaultValue, force = false, signal } = {}) => {
+  if (isNativeJsonUrl(url)) {
+    return readNativeJson(url, { defaultValue });
+  }
+
   if (!force && jsonValueCache.has(url)) {
     return cloneJson(jsonValueCache.get(url));
   }
@@ -271,6 +303,12 @@ export const primeJson = (url, data) => {
 };
 
 export const writeJson = async (url, data, { pretty = false } = {}) => {
+  if (isNativeJsonUrl(url)) {
+    const nextData = await writeNativeJson(url, data);
+    primeJson(url, nextData);
+    return nextData;
+  }
+
   const payload = JSON.stringify(data, null, pretty ? 2 : 0);
   const response = await fetch(url, {
     body: payload,

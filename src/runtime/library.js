@@ -3,6 +3,7 @@ import {
   setCountryNameResolver,
   setRuntimeAssetEndpoints,
 } from "./assets.js";
+import { isAppleNativeHost, requestNativeJson } from "./nativeHost.js";
 
 const LIBRARY_API_ROOT = "/api/library";
 const SCENARIOS_API_ROOT = "/api/scenarios";
@@ -97,6 +98,10 @@ const parseApiResponse = async (response) => {
 };
 
 const requestJson = async (pathname, { body, method = "GET" } = {}) => {
+  if (isAppleNativeHost()) {
+    return requestNativeJson(pathname, { body, method });
+  }
+
   const response = await fetch(pathname, {
     body: body == null ? undefined : JSON.stringify(body),
     headers: body == null ? undefined : { "Content-Type": "application/json" },

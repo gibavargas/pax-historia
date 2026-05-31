@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from "react";
 import {
+    APPLE_FOUNDATION_PROVIDER,
     DEFAULT_PROVIDER,
     PROVIDER_OPTIONS,
     getProviderMeta,
     providerSupportsModelDiscovery,
 } from "../AI/providerConfig.js";
+import { getAIHealthSummary, resetAIHealthMetrics } from "../AI/aiHealth.js";
 
 const baseStyle = {
     position: "fixed",
@@ -332,6 +334,14 @@ const ProviderSettingsPanel = ({ provider, settings, onSettingChange }) => {
             </>
         )}
 
+        {provider === APPLE_FOUNDATION_PROVIDER && (
+            <div style={helperStyle}>
+            Uses the native iOS/macOS app bridge. When Apple Intelligence is unavailable, the game
+            keeps turns safe with deterministic local fallbacks instead of blocking play. The harness
+            budgets against Apple's 4,096-token session context and reserves response tokens per task.
+            </div>
+        )}
+
         {provider === "openai" && (
             <>
             <SettingsInput
@@ -402,6 +412,70 @@ const ProviderSettingsPanel = ({ provider, settings, onSettingChange }) => {
             />
             </>
         )}
+        </div>
+    );
+};
+
+const AIHealthPanel = () => {
+    const [summary, setSummary] = useState(() => getAIHealthSummary());
+
+    useEffect(() => {
+        const refresh = () => setSummary(getAIHealthSummary());
+        window.addEventListener("pax-ai-health-change", refresh);
+        return () => window.removeEventListener("pax-ai-health-change", refresh);
+    }, []);
+
+    const statusColor = summary.status === "healthy"
+        ? "#86efac"
+        : summary.status === "watching"
+            ? "#fde68a"
+            : "#fca5a5";
+
+    return (
+        <div
+        style={{
+            marginBottom: "1rem",
+            padding: "0.85rem",
+            borderRadius: "10px",
+            border: "1px solid rgba(255,255,255,0.1)",
+            backgroundColor: "rgba(255,255,255,0.04)",
+        }}
+        >
+        <div style={{ display: "flex", justifyContent: "space-between", gap: "0.75rem", alignItems: "center" }}>
+        <div>
+        <div style={{ fontSize: "0.84rem", fontWeight: 700 }}>AI Reliability</div>
+        <div style={{ ...helperStyle, marginTop: "0.18rem" }}>
+        {summary.calls} calls · {summary.fallbacks} safe fallbacks · {summary.failures} provider failures
+        </div>
+        </div>
+        <span style={{ color: statusColor, fontSize: "0.76rem", fontWeight: 800, textTransform: "uppercase" }}>
+        {summary.status}
+        </span>
+        </div>
+        {summary.lastError && (
+            <div style={{ ...helperStyle, marginTop: "0.55rem", color: "rgba(255,255,255,0.72)" }}>
+            Last issue: {summary.lastError}
+            </div>
+        )}
+        <button
+        onClick={() => {
+            resetAIHealthMetrics();
+            setSummary(getAIHealthSummary());
+        }}
+        style={{
+            marginTop: "0.7rem",
+            width: "100%",
+            padding: "0.55rem 0.65rem",
+            borderRadius: "8px",
+            border: "1px solid rgba(255,255,255,0.12)",
+            backgroundColor: "rgba(0,0,0,0.2)",
+            color: "white",
+            cursor: "pointer",
+            fontSize: "0.78rem",
+        }}
+        >
+        Reset reliability counters
+        </button>
         </div>
     );
 };
@@ -568,6 +642,8 @@ const SettingsMenu = ({
         settings={providerSettings ?? {}}
         onSettingChange={onProviderSettingChange ?? (() => {})}
         />
+
+        <AIHealthPanel />
 
         <Toggle label="Fullscreen" enabled={isFullscreenEnabled} onToggle={onToggleFullscreen} />
         <Toggle label="3D Globe" enabled={isGlobeEnabled} onToggle={onToggleGlobe} />

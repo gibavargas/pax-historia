@@ -1,4 +1,18 @@
+const isAppleNativeHost = () => {
+    if (typeof window === "undefined") return false;
+    return Boolean(
+        window.__PAX_APPLE_HOST__ ||
+        window.__PAX_NATIVE_RUNTIME__?.mode === "apple" ||
+        window.webkit?.messageHandlers?.foundationModel,
+    );
+};
+
+export const APPLE_FOUNDATION_PROVIDER = "apple-foundation";
 export const DEFAULT_PROVIDER = "gemini";
+
+export function getDefaultProvider() {
+    return isAppleNativeHost() ? APPLE_FOUNDATION_PROVIDER : DEFAULT_PROVIDER;
+}
 
 export const PROVIDER_OPTIONS = [
     {
@@ -7,6 +21,13 @@ export const PROVIDER_OPTIONS = [
         group: "Native APIs",
         description: "Google AI Studio / Gemini API",
         searchTerms: ["google", "ai studio", "generativelanguage"],
+    },
+    {
+        value: APPLE_FOUNDATION_PROVIDER,
+        label: "Apple Foundation Models",
+        group: "On-device",
+        description: "Native iOS/macOS bridge to Apple Intelligence",
+        searchTerms: ["apple", "foundation", "foundationmodels", "on-device", "ios", "macos"],
     },
     {
         value: "openai",
@@ -95,10 +116,14 @@ function getSettingConfig(provider, field) {
 
 export function normalizeProvider(provider) {
     if (provider === "custom") return "openai-compatible";
-    return isSupportedProvider(provider) ? provider : DEFAULT_PROVIDER;
+    return isSupportedProvider(provider) ? provider : getDefaultProvider();
 }
 
 export function getStoredProvider() {
+    if (typeof localStorage === "undefined") {
+        return getDefaultProvider();
+    }
+
     return normalizeProvider(localStorage.getItem("api_provider"));
 }
 

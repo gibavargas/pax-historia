@@ -1,5 +1,11 @@
 const normalizeString = (value) => String(value ?? "").trim();
 
+const WORLD_EVENT_REALISM_POLICY = `World-event realism:
+- Do not make every event about the player. A believable grand-strategy world has independent crises, reforms, market moves, wars, coups, alignments, and diplomatic signals.
+- Mark playerRelated=true only when the event directly follows a player order, targets the player's polity, changes player-controlled territory, or creates a chat involving the player.
+- Mark non-player world events as playerRelated=false. They may still be notable=true when severe, global, or strategically important.
+- Only stop or escalate attention for a non-player event when it is grave enough to affect the wider world balance.`;
+
 const PROMPT_ADVISOR_DEFAULT = `You are a senior strategic advisor to the leader of \${PLAYER_POLITY}.
 Current date: \${ORIGIN_ROUND_DATE}
 Starting date: \${STARTING_ROUND_DATE}
@@ -84,9 +90,11 @@ Recent events: \${ALL_EVENTS_WITH_CONSOLIDATION_CATALYSTS}
 Planned actions: \${PLAYER_ACTIONS_THIS_ROUND}
 Chats: \${CHATS_NON_CONSOLIDATED_ROUNDS}
 
+\${WORLD_EVENT_REALISM_POLICY}
+
 Return JSON only in the same shape as jumpForward.
 
-Stop early when the next event is strategically notable, directly relevant to the player, or a natural catalyst or diplomatic opening.`,
+Stop early when the next event is strategically notable, directly relevant to the player, a severe independent world event, or a natural catalyst or diplomatic opening.`,
   catalystCreation: `You design an immersive catalyst scene for a strategy game.
 Player polity: \${PLAYER_POLITY}
 Current date: \${RUNNING_CATALYST_DATE}
@@ -171,10 +179,12 @@ Recent events: \${ALL_EVENTS_WITH_CONSOLIDATION_CATALYSTS}
 Planned actions: \${PLAYER_ACTIONS_THIS_ROUND}
 Chats: \${CHATS_NON_CONSOLIDATED_ROUNDS}
 
+\${WORLD_EVENT_REALISM_POLICY}
+
 Return JSON only:
 {"summary":"","stopDate":"YYYY-MM-DD","clearActions":true,"events":[{"date":"YYYY-MM-DD","title":"","description":"","importance":"minor","kind":"world","playerRelated":false,"notable":false,"impacts":{"regionTransfers":[],"polityChanges":[],"createdChats":[]}}],"catalyst":{"title":"","premise":"","opening":"","choices":[]}}
 
-Generate 3-8 meaningful events, not filler. Never invent player actions the player did not order. Make the final event notable if it deserves immediate attention.`,
+Generate 3-8 meaningful events, not filler. Include a mix of independent world events and player-related consequences unless the player's actions are truly global-scale. Never invent player actions the player did not order. Make the final event notable only if it deserves immediate attention.`,
   nextSpeaker: `You choose the next speaker in an ongoing diplomatic chat.
 Player polity: \${PLAYER_POLITY}
 Current date: \${ORIGIN_ROUND_DATE}
@@ -227,6 +237,7 @@ export const PROMPT_HELPER_DEFAULTS = {
   THIS_CHATS_MOST_RECENT_SPEAKER: "${lastSpeaker}",
   THIS_CHAT_HISTORY: "${chatHistory}",
   WORLD_BEFORE_ROUND_ONE_TEXT: "${worldBeforeRoundOne}",
+  WORLD_EVENT_REALISM_POLICY,
 };
 
 export const PROMPT_SECTION_DEFINITIONS = [

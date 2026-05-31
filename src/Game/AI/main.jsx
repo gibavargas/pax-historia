@@ -1,9 +1,12 @@
 import {
+    APPLE_FOUNDATION_PROVIDER,
     getProviderSettings,
     getStoredProvider,
     providerSupportsModelDiscovery,
     setProviderField,
 } from "./providerConfig.js";
+import { callAppleFoundation } from "./appleBridge.js";
+import { recordAIResult, shouldUseDeterministicFallback } from "./aiHealth.js";
 import { JSON_URLS, readJson } from "../../runtime/assets.js";
 import { normalizePromptPack } from "./gameplayPrompts.js";
 import {
@@ -431,16 +434,48 @@ async function callAnthropic(systemPrompt, history, { retries = 3, retryDelay = 
 }
 
 export async function callAI(systemPrompt, history, opts) {
-    switch (getStoredProvider()) {
-    case "openai":
-        return callOpenAI(systemPrompt, history, opts);
-    case "anthropic":
-        return callAnthropic(systemPrompt, history, opts);
-    case "openai-compatible":
-        return callOpenAICompatible(systemPrompt, history, opts);
-    case "gemini":
-    default:
-        return callGemini(systemPrompt, history, opts);
+    const provider = getStoredProvider();
+
+    if (shouldUseDeterministicFallback(provider) && opts?.allowCircuitBreaker !== false) {
+        throw new Error("AI circuit breaker is active after repeated provider failures.");
+    }
+
+    try {
+        let text = "";
+
+        switch (provider) {
+        case APPLE_FOUNDATION_PROVIDER:
+            text = await callAppleFoundation(systemPrompt, history, opts);
+            break;
+        case "openai":
+            text = await callOpenAI(systemPrompt, history, opts);
+            break;
+        case "anthropic":
+            text = await callAnthropic(systemPrompt, history, opts);
+            break;
+        case "openai-compatible":
+            text = await callOpenAICompatible(systemPrompt, history, opts);
+            break;
+        case "gemini":
+        default:
+            text = await callGemini(systemPrompt, history, opts);
+            break;
+        }
+
+        recordAIResult({
+            ok: true,
+            provider,
+            taskKey: opts?.taskKey || "",
+        });
+        return text;
+    } catch (error) {
+        recordAIResult({
+            error: error?.message || String(error),
+            ok: false,
+            provider,
+            taskKey: opts?.taskKey || "",
+        });
+        throw error;
     }
 }
 
