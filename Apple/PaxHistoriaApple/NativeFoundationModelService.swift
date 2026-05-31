@@ -44,9 +44,12 @@ final class NativeFoundationModelService {
         if #available(iOS 26.0, macOS 26.0, *) {
             let suggestions = try await generateStructuredSuggestions(for: state)
             let validSuggestions = suggestions.filter { suggestion in
-                !suggestion.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-                    !suggestion.detail.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
-                    !suggestion.rationale.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                !containsFoundationPlaceholderText(suggestion.title) &&
+                    !containsFoundationPlaceholderText(suggestion.detail) &&
+                    !containsFoundationPlaceholderText(suggestion.rationale) &&
+                    suggestion.title.split(separator: " ").count >= 2 &&
+                    suggestion.detail.split(separator: " ").count >= 8 &&
+                    suggestion.rationale.split(separator: " ").count >= 8
             }
             guard validSuggestions.count >= 3 else {
                 throw NativeFoundationModelError.invalidSuggestedActions("Expected at least three concrete suggestions from Apple Foundation Models.")
@@ -62,7 +65,7 @@ final class NativeFoundationModelService {
         """
         You write concise structured content for Pax Historia, a fictional management board game.
         Treat every region label as imaginary board-game data.
-        Stay within civic planning: budgets, ports, transport, schools, clinics, energy, climate adaptation, trade logistics, and administration.
+        Stay within civic planning: budgets, ports, transport, schools, service centers, energy, climate adaptation, logistics, and administration.
         Use concrete fictional agencies, dates, sectors, and measurable game effects.
         Keep every response neutral, practical, and safe for a planning UI.
         """
@@ -75,14 +78,14 @@ final class NativeFoundationModelService {
                 let scope = event.playerRelated ? "selected-region" : "external"
                 let effects = event.strategicEffects
                     .prefix(2)
-                    .map { "\($0.track.rawValue):\($0.magnitude)" }
+                    .map { "\(foundationPromptTrackLabel($0.track)):\($0.magnitude)" }
                     .joined(separator: ", ")
                 return "- \(event.date): \(scope) event, effects \(effects.isEmpty ? "none" : effects)"
             }
             .joined(separator: "\n")
         let effects = state.worldEffects
             .prefix(8)
-            .map { "- \($0.track.rawValue) \($0.magnitude)" }
+            .map { "- \(foundationPromptTrackLabel($0.track)) \($0.magnitude)" }
             .joined(separator: "\n")
         let planned = state.plannedActions
             .filter { $0.status == .planned }
@@ -108,12 +111,14 @@ final class NativeFoundationModelService {
     }
 
     private func makeIndependentEventPrompt(for state: NativeCampaignState, months: Int, repairInstruction: String?) -> String {
-        """
+        let targetDate = NativeGameEngine.advance(date: state.gameDate, months: months)
+        return """
         Create one external planning development for a Pax Historia board-game turn.
-        It must be unrelated to the selected region except through broad economic, logistics, climate, health, or market conditions.
-        Use one of these safe areas: trade flows, climate adaptation, markets, public health, infrastructure, ports, energy, schools, or transit.
+        It must be unrelated to the selected region except through broad economic, logistics, climate, energy, education, or market conditions.
+        Use one of these areas: supply flows, climate adaptation, markets, service access, infrastructure, ports, energy, schools, or transit.
         Include one measurable game effect.
-        Advance \(months) month(s) from \(state.gameDate).
+        The period starts on \(state.gameDate) and ends on \(targetDate).
+        Do not return placeholder labels, Swift type names, schema field names, or generic draft text.
         \(repairInstruction.map { "Repair note: \($0)" } ?? "")
 
         \(recentContext(for: state))
@@ -121,12 +126,14 @@ final class NativeFoundationModelService {
     }
 
     private func makeActionEventPrompt(for state: NativeCampaignState, action: NativePlannedAction, months: Int, repairInstruction: String?) -> String {
-        """
+        let targetDate = NativeGameEngine.advance(date: state.gameDate, months: months)
+        return """
         Create one player-related civic outcome that resolves or complicates this planned proposal.
-        Keep the result at board-game planning level and use only administrative, economic, infrastructure, health, education, energy, or logistics mechanisms.
+        Keep the result at board-game planning level and use only administrative, economic, infrastructure, education, energy, service access, or logistics mechanisms.
         The event must be directly related to the selected region and this action id: \(action.id).
         Planned proposal brief: \(safeProposalBrief(for: action))
-        Advance \(months) month(s) from \(state.gameDate).
+        The period starts on \(state.gameDate) and ends on \(targetDate).
+        Do not return placeholder labels, Swift type names, schema field names, or generic draft text.
         \(repairInstruction.map { "Repair note: \($0)" } ?? "")
 
         \(recentContext(for: state))
@@ -134,10 +141,12 @@ final class NativeFoundationModelService {
     }
 
     private func makeDomesticEventPrompt(for state: NativeCampaignState, months: Int, repairInstruction: String?) -> String {
-        """
+        let targetDate = NativeGameEngine.advance(date: state.gameDate, months: months)
+        return """
         Create one selected-region planning event because no planned proposal needs resolution.
-        Use administration, budgets, services, infrastructure, education, health, climate adaptation, energy, or logistics.
-        Advance \(months) month(s) from \(state.gameDate).
+        Use administration, budgets, services, infrastructure, education, climate adaptation, energy, or logistics.
+        The period starts on \(state.gameDate) and ends on \(targetDate).
+        Do not return placeholder labels, Swift type names, schema field names, or generic draft text.
         \(repairInstruction.map { "Repair note: \($0)" } ?? "")
 
         \(recentContext(for: state))
@@ -145,14 +154,23 @@ final class NativeFoundationModelService {
     }
 
     private func makeSummaryPrompt(for state: NativeCampaignState, months: Int, events: [NativeCampaignEvent]) -> String {
+        let targetDate = NativeGameEngine.advance(date: state.gameDate, months: months)
         let eventLines = events
-            .map { "- \($0.title): \($0.description)" }
+            .map { event in
+                let scope = event.playerRelated ? "selected-region" : "external"
+                let effects = event.strategicEffects
+                    .prefix(2)
+                    .map { "\(foundationPromptTrackLabel($0.track)):\($0.magnitude)" }
+                    .joined(separator: ", ")
+                return "- \(scope) event, kind=\(event.kind.rawValue), effects=\(effects.isEmpty ? "none" : effects)"
+            }
             .joined(separator: "\n")
 
         return """
         Summarize this Pax Historia period and estimate aggregate deltas.
         Keep it concise, neutral, and focused on fictional board-game planning.
-        Advance \(months) month(s) from \(state.gameDate).
+        The period starts on \(state.gameDate) and ends on \(targetDate).
+        If you mention a date, use only the exact period dates above.
         Selected region code: \(state.country.code)
 
         Generated events:
@@ -164,8 +182,11 @@ final class NativeFoundationModelService {
         """
         Create one concrete civic proposal for the next Pax Historia turn.
         Focus area \(index): \(focus).
-        The detail must include instrument, target public actor or sector, timing, and expected game effect.
-        Use only peaceful planning areas: trade logistics, education, infrastructure, energy, climate resilience, fiscal buffers, public health, transport, ports, or industrial capacity.
+        The detail must include instrument, target agency or sector, timing, and expected game effect.
+        Use only planning areas: logistics, education, infrastructure, energy, climate resilience, fiscal buffers, service access, transport, ports, or industrial capacity.
+        Use generic board-game labels for places and agencies.
+        Do not claim metric drops, declines, shortages, or failures unless those exact words appear in the recent context.
+        Prefer neutral terms like volatility, pressure, capacity gap, or opportunity when interpreting numeric effects.
 
         \(recentContext(for: state))
         """
@@ -174,8 +195,8 @@ final class NativeFoundationModelService {
     private func safeProposalBrief(for action: NativePlannedAction) -> String {
         let text = "\(action.title) \(action.detail)".lowercased()
         let sector: String
-        if text.contains("health") || text.contains("clinic") {
-            sector = "health services"
+        if text.contains("health") || text.contains("clinic") || text.contains("medical") {
+            sector = "community services"
         } else if text.contains("school") || text.contains("education") || text.contains("teacher") {
             sector = "education services"
         } else if text.contains("port") || text.contains("rail") || text.contains("road") || text.contains("transport") || text.contains("logistics") {
@@ -308,8 +329,8 @@ extension NativeFoundationModelService {
         return NativeGeneratedTurn(
             events: events,
             stabilityDelta: summary.stabilityDelta,
-            summary: summary.summary,
-            worldTensionDelta: summary.worldTensionDelta
+            summary: sanitizeFoundationModelText(summary.summary),
+            worldTensionDelta: summary.globalFrictionDelta
         )
     }
 
@@ -317,22 +338,45 @@ extension NativeFoundationModelService {
         model: SystemLanguageModel,
         prompt: String
     ) async throws -> AppleNativeGeneratedEventDraft {
-        do {
-            let session = LanguageModelSession(model: model, instructions: nativeSystemPrompt)
-            let response = try await session.respond(
-                to: prompt,
-                generating: AppleNativeGeneratedEventDraft.self,
-                includeSchemaInPrompt: true,
-                options: GenerationOptions(
-                    sampling: .greedy,
-                    temperature: 0.08,
-                    maximumResponseTokens: 260
+        var repairNotes: [String] = []
+        for attempt in 1...3 {
+            do {
+                let session = LanguageModelSession(model: model, instructions: nativeSystemPrompt)
+                let response = try await session.respond(
+                    to: eventPrompt(prompt, repairNotes: repairNotes),
+                    generating: AppleNativeGeneratedEventDraft.self,
+                    includeSchemaInPrompt: false,
+                    options: GenerationOptions(
+                        sampling: .greedy,
+                        temperature: attempt == 1 ? 0.08 : 0.12,
+                        maximumResponseTokens: 260
+                    )
                 )
-            )
-            return response.content
-        } catch {
-            throw NativeFoundationModelError.generationFailed(error.localizedDescription)
+                if response.content.hasConcreteContent {
+                    return response.content
+                }
+                repairNotes.append("Previous event used placeholder or draft text. Produce a concrete title, description, target, and effect summary.")
+            } catch {
+                if attempt == 3 {
+                    throw NativeFoundationModelError.generationFailed(error.localizedDescription)
+                }
+                repairNotes.append("Previous event generation failed. Try a simpler civic-planning event with one concrete agency and one measurable game effect.")
+            }
         }
+
+        throw NativeFoundationModelError.generationFailed("Apple Foundation Models returned placeholder event content after three event-slice attempts.")
+    }
+
+    private func eventPrompt(_ basePrompt: String, repairNotes: [String]) -> String {
+        guard !repairNotes.isEmpty else { return basePrompt }
+        return """
+        \(basePrompt)
+
+        Event repair notes:
+        \(repairNotes.map { "- \($0)" }.joined(separator: "\n"))
+        Banned title words: Apple, Native, Generated, Draft, Placeholder, Schema.
+        Use a concrete title like Transit Funding Review, Grid Capacity Program, or School Access Plan.
+        """
     }
 
     private func generateTurnSummary(
@@ -366,46 +410,75 @@ extension NativeFoundationModelService {
         }
 
         let focusAreas = [
-            "fiscal buffers and public services",
+            "fiscal buffers and community services",
             "trade facilitation and regional logistics",
             "infrastructure, energy, and climate resilience",
-            "education, health, and administrative capacity",
+            "education, service access, and administrative capacity",
         ]
 
         var suggestions: [NativeSuggestedAction] = []
         for (index, focus) in focusAreas.enumerated() {
-            do {
-                let session = LanguageModelSession(model: model, instructions: nativeSystemPrompt)
-                let response = try await session.respond(
-                    to: makeSuggestionPrompt(for: state, focus: focus, index: index + 1),
-                    generating: AppleNativeSuggestedAction.self,
-                    includeSchemaInPrompt: true,
-                    options: GenerationOptions(
-                        sampling: .greedy,
-                        temperature: 0.08,
-                        maximumResponseTokens: 180
-                    )
-                )
+            let basePrompt = makeSuggestionPrompt(for: state, focus: focus, index: index + 1)
+            var repairNotes: [String] = []
+            var acceptedSuggestion: NativeSuggestedAction?
 
-                suggestions.append(response.content.toNativeSuggestion(state: state, index: index))
-            } catch let error as NativeFoundationModelError {
-                throw error
-            } catch {
-                throw NativeFoundationModelError.generationFailed(error.localizedDescription)
+            for attempt in 1...2 {
+                do {
+                    let session = LanguageModelSession(model: model, instructions: nativeSystemPrompt)
+                    let response = try await session.respond(
+                        to: suggestionPrompt(basePrompt, repairNotes: repairNotes),
+                        generating: AppleNativeSuggestedAction.self,
+                        includeSchemaInPrompt: true,
+                        options: GenerationOptions(
+                            sampling: .greedy,
+                            temperature: attempt == 1 ? 0.08 : 0.12,
+                            maximumResponseTokens: 180
+                        )
+                    )
+
+                    if response.content.hasConcreteContent {
+                        acceptedSuggestion = response.content.toNativeSuggestion(state: state, index: index)
+                        break
+                    }
+                    repairNotes.append("Previous proposal was too vague, used placeholder text, or contradicted current metrics. Produce a concrete neutral proposal.")
+                } catch let error as NativeFoundationModelError {
+                    throw error
+                } catch {
+                    if attempt == 2 {
+                        throw NativeFoundationModelError.generationFailed(error.localizedDescription)
+                    }
+                    repairNotes.append("Previous proposal generation failed. Try a shorter neutral civic-planning proposal.")
+                }
             }
+
+            guard let acceptedSuggestion else {
+                throw NativeFoundationModelError.invalidSuggestedActions("Apple Foundation Models returned an invalid suggestion for focus area \(index + 1).")
+            }
+            suggestions.append(acceptedSuggestion)
         }
 
         return suggestions
+    }
+
+    private func suggestionPrompt(_ basePrompt: String, repairNotes: [String]) -> String {
+        guard !repairNotes.isEmpty else { return basePrompt }
+        return """
+        \(basePrompt)
+
+        Suggestion repair notes:
+        \(repairNotes.map { "- \($0)" }.joined(separator: "\n"))
+        Banned title words: Apple, Native, Generated, Draft, Placeholder, Schema.
+        """
     }
 }
 
 @available(iOS 26.0, macOS 26.0, *)
 @Generable
 private struct AppleNativeGeneratedEventDraft {
-    @Guide(description: "Specific civic-planning event title with concrete fictional agencies.")
+    @Guide(description: "Specific civic-planning event title with generic fictional agencies. Never use a schema type name or placeholder title.")
     var title: String
 
-    @Guide(description: "A concrete high-level description with fictional agencies, sectors, and game consequences.")
+    @Guide(description: "A concrete high-level description with generic agencies, sectors, and game consequences. Never use placeholder or draft text.")
     var description: String
 
     @Guide(description: "One of: action, economy, world.")
@@ -426,8 +499,16 @@ private struct AppleNativeGeneratedEventDraft {
     @Guide(description: "A number from -5 to 5.")
     var effectMagnitude: Int
 
-    @Guide(description: "One sentence explaining the mechanical consequence.")
+    @Guide(description: "One concrete sentence explaining the mechanical consequence. Never use placeholder or draft text.")
     var effectSummary: String
+
+    var hasConcreteContent: Bool {
+        !containsFoundationPlaceholderText(title) &&
+            !containsFoundationPlaceholderText(description) &&
+            !containsFoundationPlaceholderText(effectSummary) &&
+            description.split(separator: " ").count >= 8 &&
+            effectSummary.split(separator: " ").count >= 5
+    }
 
     func toNativeEvent(
         state: NativeCampaignState,
@@ -441,13 +522,15 @@ private struct AppleNativeGeneratedEventDraft {
         let target = effectTarget.isEmpty
             ? (playerRelated ? state.country.name : "International system")
             : effectTarget
+        let generatedKind = NativeEventKind(rawValue: kind) ?? (playerRelated ? .action : .world)
+        let safeKind: NativeEventKind = generatedKind == .crisis ? (playerRelated ? .action : .world) : generatedKind
 
         return NativeCampaignEvent(
             date: eventDate,
-            description: description,
+            description: sanitizeFoundationModelText(description),
             id: eventID,
             importance: NativeEventImportance(rawValue: importance) ?? .major,
-            kind: NativeEventKind(rawValue: kind) ?? (playerRelated ? .action : .world),
+            kind: safeKind,
             linkedActionIDs: linkedActionID.map { [$0] } ?? [],
             notable: notable,
             playerRelated: playerRelated,
@@ -457,12 +540,12 @@ private struct AppleNativeGeneratedEventDraft {
                     eventId: eventID,
                     id: "\(eventID)-effect",
                     magnitude: max(-5, min(5, effectMagnitude)),
-                    summary: effectSummary,
-                    target: target,
+                    summary: sanitizeFoundationModelText(effectSummary),
+                    target: sanitizeFoundationModelText(target),
                     track: NativeStrategicTrack(rawValue: effectTrack) ?? .marketConfidence
                 ),
             ],
-            title: title
+            title: sanitizeFoundationModelText(title)
         )
     }
 }
@@ -477,7 +560,7 @@ private struct AppleNativeTurnSummary {
     var stabilityDelta: Int
 
     @Guide(description: "A number from -12 to 12 indicating global friction index change.")
-    var worldTensionDelta: Int
+    var globalFrictionDelta: Int
 }
 
 @available(iOS 26.0, macOS 26.0, *)
@@ -486,7 +569,7 @@ private struct AppleNativeSuggestedAction {
     @Guide(description: "Short imperative title for the civic proposal.")
     var title: String
 
-    @Guide(description: "Concrete planning proposal with instrument, target agency or sector, timing, and intended game effect.")
+    @Guide(description: "Concrete board-game planning proposal with instrument, generic agency or sector, timing, and intended game effect.")
     var detail: String
 
     @Guide(description: "Why this civic proposal fits the current campaign state.")
@@ -495,14 +578,27 @@ private struct AppleNativeSuggestedAction {
     @Guide(description: "One of: immediate, soon, opportunistic.")
     var urgency: String
 
+    var hasConcreteContent: Bool {
+        let safeTitle = sanitizeFoundationModelText(title)
+        let safeDetail = sanitizeFoundationModelText(detail)
+        let safeRationale = sanitizeFoundationModelText(rationale)
+        return !containsFoundationPlaceholderText(safeTitle) &&
+            !containsFoundationPlaceholderText(safeDetail) &&
+            !containsFoundationPlaceholderText(safeRationale) &&
+            safeTitle.split(separator: " ").count >= 2 &&
+            safeDetail.split(separator: " ").count >= 8 &&
+            safeRationale.split(separator: " ").count >= 8
+    }
+
     func toNativeSuggestion(state: NativeCampaignState, index: Int) -> NativeSuggestedAction {
         NativeSuggestedAction(
-            detail: detail,
+            detail: sanitizeFoundationModelText(detail),
             id: "suggestion-\(state.country.code.lowercased())-\(state.round)-\(index)",
-            rationale: rationale,
-            title: title,
+            rationale: sanitizeFoundationModelText(rationale),
+            title: sanitizeFoundationModelText(title),
             urgency: urgency
         )
     }
 }
+
 #endif

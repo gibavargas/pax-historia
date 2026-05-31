@@ -185,6 +185,10 @@ struct NativeGameView: View {
                 }
             }
 
+            if let suggestionError = store.lastSuggestionError, !suggestionError.isEmpty {
+                SuggestionWarning(message: suggestionError)
+            }
+
             if let state = store.state, !state.suggestedActions.isEmpty {
                 ForEach(state.suggestedActions) { suggestion in
                     SuggestedActionRow(suggestion: suggestion) {
@@ -357,6 +361,21 @@ private struct ErrorBanner: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(.red.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             .accessibilityIdentifier("native-apple-error")
+    }
+}
+
+private struct SuggestionWarning: View {
+    let message: String
+
+    var body: some View {
+        Label(message, systemImage: "exclamationmark.triangle")
+            .font(.caption)
+            .foregroundStyle(.orange)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .accessibilityIdentifier("native-apple-suggestion-warning")
     }
 }
 

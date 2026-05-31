@@ -87,11 +87,20 @@ enum NativeGameEngine {
             guard !event.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 throw NativeGameEngineError.invalidTurn("Event \(index + 1) is missing a title.")
             }
+            guard !containsFoundationPlaceholderText(event.title) else {
+                throw NativeGameEngineError.invalidTurn("Event \(index + 1) used a schema placeholder instead of a real title.")
+            }
             guard !event.description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 throw NativeGameEngineError.invalidTurn("Event \(index + 1) is missing a description.")
             }
+            guard !containsFoundationPlaceholderText(event.description), event.description.split(separator: " ").count >= 8 else {
+                throw NativeGameEngineError.invalidTurn("Event \(index + 1) needs a concrete description.")
+            }
             guard !event.strategicEffects.isEmpty else {
                 throw NativeGameEngineError.invalidTurn("Event \(event.title) has no strategic effects.")
+            }
+            guard event.strategicEffects.allSatisfy({ !containsFoundationPlaceholderText($0.summary) && $0.summary.split(separator: " ").count >= 5 }) else {
+                throw NativeGameEngineError.invalidTurn("Event \(index + 1) needs a concrete strategic effect summary.")
             }
 
             return normalized(event, index: index, targetDate: targetDate, country: state.country)
@@ -184,4 +193,5 @@ enum NativeGameEngine {
     private static func clamp(_ value: Int) -> Int {
         max(0, min(100, value))
     }
+
 }

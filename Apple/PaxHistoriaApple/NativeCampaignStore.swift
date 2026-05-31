@@ -8,6 +8,7 @@ final class NativeCampaignStore: ObservableObject {
     @Published private(set) var isAdvancing = false
     @Published private(set) var isLoadingSuggestions = false
     @Published private(set) var lastError: String?
+    @Published private(set) var lastSuggestionError: String?
 
     private let defaults: UserDefaults
     private let encoder: JSONEncoder
@@ -25,6 +26,7 @@ final class NativeCampaignStore: ObservableObject {
         self.aiService = aiService
         selectedCountry = Self.loadSelectedCountry(from: defaults, decoder: decoder)
         state = Self.loadCampaignState(from: defaults, decoder: decoder)
+            .map(Self.normalizedLoadedState)
 
         if let selectedCountry, state == nil {
             state = NativeGameEngine.initialState(for: selectedCountry)
@@ -35,6 +37,8 @@ final class NativeCampaignStore: ObservableObject {
     func choose(_ country: PlayerCountry) {
         selectedCountry = country
         state = NativeGameEngine.initialState(for: country)
+        lastError = nil
+        lastSuggestionError = nil
         if let data = try? encoder.encode(country) {
             defaults.set(data, forKey: Self.selectedCountryKey)
         }
@@ -46,6 +50,8 @@ final class NativeCampaignStore: ObservableObject {
         selectedCountry = nil
         state = nil
         draftAction = ""
+        lastError = nil
+        lastSuggestionError = nil
         defaults.removeObject(forKey: Self.selectedCountryKey)
         defaults.removeObject(forKey: Self.campaignStateKey)
     }
@@ -114,6 +120,7 @@ final class NativeCampaignStore: ObservableObject {
             )
 
             state = currentState
+            lastError = nil
             persistState()
             await refreshSuggestedActions(force: true)
         } catch {
@@ -134,7 +141,7 @@ final class NativeCampaignStore: ObservableObject {
         guard force || currentState.suggestedActions.isEmpty else { return }
 
         isLoadingSuggestions = true
-        lastError = nil
+        lastSuggestionError = nil
         defer { isLoadingSuggestions = false }
 
         do {
@@ -142,11 +149,11 @@ final class NativeCampaignStore: ObservableObject {
             currentState.suggestedActions = suggestions
             currentState.aiReadiness = .available(tokenBudget: "sliced-guided-generation context=4096, suggestions=4x180")
             state = currentState
+            lastSuggestionError = nil
             persistState()
         } catch {
-            currentState.aiReadiness = .failure(error)
             state = currentState
-            lastError = error.localizedDescription
+            lastSuggestionError = "\(error.localizedDescription) No substitute suggestions were used."
             persistState()
         }
     }
@@ -174,5 +181,53 @@ final class NativeCampaignStore: ObservableObject {
         }
 
         return try? decoder.decode(NativeCampaignState.self, from: data)
+    }
+
+    private static func normalizedLoadedState(_ loaded: NativeCampaignState) -> NativeCampaignState {
+        var state = loaded
+        if state.aiReadiness.availability == "apple-foundation-error" {
+            state.aiReadiness = .notChecked
+        }
+        state.suggestedActions = []
+        state.lastSummary = sanitizeFoundationModelText(state.lastSummary)
+        state.plannedActions = state.plannedActions.map { action in
+            var action = action
+            action.title = sanitizeFoundationModelText(action.title)
+            action.detail = sanitizeFoundationModelText(action.detail)
+            return action
+        }
+        state.timeline = state.timeline.compactMap { event in
+            var event = event
+            event.title = sanitizeFoundationModelText(event.title)
+            event.description = sanitizeFoundationModelText(event.description)
+            guard !containsFoundationPlaceholderText(event.title), !containsFoundationPlaceholderText(event.description) else {
+                return nil
+            }
+            if event.kind == .crisis {
+                event.kind = event.playerRelated ? .action : .world
+            }
+            event.strategicEffects = event.strategicEffects.compactMap { effect in
+                var effect = effect
+                effect.summary = sanitizeFoundationModelText(effect.summary)
+                effect.target = sanitizeFoundationModelText(effect.target)
+                effect.track = foundationVisibleTrack(effect.track)
+                guard !containsFoundationPlaceholderText(effect.summary), !containsFoundationPlaceholderText(effect.target) else {
+                    return nil
+                }
+                return effect
+            }
+            return event
+        }
+        state.worldEffects = state.worldEffects.compactMap { effect in
+            var effect = effect
+            effect.summary = sanitizeFoundationModelText(effect.summary)
+            effect.target = sanitizeFoundationModelText(effect.target)
+            effect.track = foundationVisibleTrack(effect.track)
+            guard !containsFoundationPlaceholderText(effect.summary), !containsFoundationPlaceholderText(effect.target) else {
+                return nil
+            }
+            return effect
+        }
+        return state
     }
 }

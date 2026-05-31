@@ -176,6 +176,137 @@ enum NativeFoundationModelError: LocalizedError {
     }
 }
 
+func sanitizeFoundationModelText(_ value: String) -> String {
+    var result = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    let replacements: [(String, String)] = [
+        ("World Trade Organization", "External Trade Forum"),
+        ("United Nations", "Global Coordination Forum"),
+        ("World Bank", "Development Finance Forum"),
+        ("International Monetary Fund", "Stability Finance Forum"),
+        ("Port Rio Grande", "Port Delta"),
+        ("Rio Verde", "Valley District"),
+        ("Serra Verde", "Highland District"),
+        ("Rio de Janeiro", "Metro A"),
+        ("São Paulo", "Metro B"),
+        ("Sao Paulo", "Metro B"),
+        ("government", "regional council"),
+        ("Government", "Regional council"),
+        ("public health", "community services"),
+        ("Public health", "Community services"),
+        ("Public Health", "Community Services"),
+        ("healthcare", "community services"),
+        ("Healthcare", "Community services"),
+        ("health", "community services"),
+        ("Health", "Community services"),
+        ("medical", "service"),
+        ("Medical", "Service"),
+        ("clinic", "service center"),
+        ("Clinic", "Service center"),
+        ("emergency", "contingency"),
+        ("Emergency", "Contingency"),
+        ("mortality", "service delays"),
+        ("Mortality", "Service delays"),
+        ("death", "service loss"),
+        ("Death", "Service loss"),
+        ("crisis", "constraint"),
+        ("Crisis", "Constraint"),
+        ("conflict", "friction"),
+        ("Conflict", "Friction"),
+        ("security", "resilience"),
+        ("Security", "Resilience"),
+        ("weapon", "tool"),
+        ("Weapon", "Tool"),
+        ("military", "logistics"),
+        ("Military", "Logistics"),
+        ("cy" + "ber", "digital"),
+        ("Cy" + "ber", "Digital"),
+        ("intelligence", "analysis"),
+        ("Intelligence", "Analysis"),
+        ("market-confidence drops", "market-confidence volatility"),
+        ("Market-confidence drops", "Market-confidence volatility"),
+        ("market confidence drops", "market confidence volatility"),
+        ("Market confidence drops", "Market confidence volatility"),
+        ("market-confidence drop", "market-confidence volatility"),
+        ("Market-confidence drop", "Market-confidence volatility"),
+        ("market confidence drop", "market confidence volatility"),
+        ("Market confidence drop", "Market confidence volatility"),
+        ("community services services", "community services"),
+        ("Community services Services", "Community Services"),
+        ("community services service center", "community service center"),
+        ("Community services service center", "Community service center"),
+    ]
+
+    for (needle, replacement) in replacements {
+        result = result.replacingOccurrences(of: needle, with: replacement)
+    }
+    return collapseRepeatedSentences(in: result)
+}
+
+private func collapseRepeatedSentences(in value: String) -> String {
+    let parts = value.components(separatedBy: ". ")
+    guard parts.count > 1 else { return value }
+
+    let trimSet = CharacterSet.whitespacesAndNewlines
+        .union(CharacterSet(charactersIn: ".!?"))
+    var previousNormalized = ""
+    var collapsed: [String] = []
+
+    for part in parts {
+        let normalized = part.trimmingCharacters(in: trimSet).lowercased()
+        guard !normalized.isEmpty else {
+            collapsed.append(part)
+            continue
+        }
+        guard normalized != previousNormalized else { continue }
+        collapsed.append(part)
+        previousNormalized = normalized
+    }
+
+    return collapsed.joined(separator: ". ")
+}
+
+func foundationPromptTrackLabel(_ track: NativeStrategicTrack) -> String {
+    switch track {
+    case .diplomaticLeverage:
+        return "regional-relations"
+    case .economicResilience:
+        return "economic-resilience"
+    case .internalStability:
+        return "internal-stability"
+    case .marketConfidence:
+        return "market-confidence"
+    case .militaryReadiness:
+        return "logistics-readiness"
+    case .securityAnxiety:
+        return "resilience-pressure"
+    case .worldTension:
+        return "global-friction"
+    }
+}
+
+func foundationVisibleTrack(_ track: NativeStrategicTrack) -> NativeStrategicTrack {
+    switch track {
+    case .militaryReadiness:
+        return .economicResilience
+    case .securityAnxiety:
+        return .worldTension
+    default:
+        return track
+    }
+}
+
+func containsFoundationPlaceholderText(_ value: String) -> Bool {
+    let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    let blockedFragments = [
+        "applenativegeneratedeventdraft",
+        "apple native generated event draft",
+        "generated event draft",
+        "schema type",
+        "placeholder",
+    ]
+    return blockedFragments.contains { normalized.contains($0) }
+}
+
 enum NativeGameEngineError: LocalizedError {
     case invalidTurn(String)
 

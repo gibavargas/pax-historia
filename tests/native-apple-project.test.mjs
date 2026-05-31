@@ -39,12 +39,22 @@ test("native Apple game uses guided generation inside the Apple context window",
   assert.match(nativeService, /maximumResponseTokens: 180/);
   assert.doesNotMatch(nativeService, /AppleNativeSuggestedActionSet/);
   assert.doesNotMatch(nativeService, /weapons|cyber|coercion|surveillance|military-readiness|security-anxiety/);
+  assert.match(nativeService, /sanitizeFoundationModelText/);
+  assert.match(nativeService, /includeSchemaInPrompt: false/);
+  assert.match(nativeService, /Do not return placeholder labels/);
+  assert.match(nativeService, /globalFrictionDelta/);
+  assert.match(nativeService, /suggestionPrompt/);
+  assert.match(nativeService, /hasConcreteContent/);
+  assert.match(nativeModels, /collapseRepeatedSentences/);
+  assert.match(nativeModels, /Global Coordination Forum/);
 });
 
 test("native event engine enforces world events and strategic consequences", () => {
   assert.match(nativeEngine, /turn\.events\.contains\(where: \{ !\$0\.playerRelated \}\)/);
   assert.match(nativeEngine, /throw NativeGameEngineError\.invalidTurn/);
   assert.match(nativeEngine, /strategicEffects/);
+  assert.match(nativeEngine, /containsFoundationPlaceholderText/);
+  assert.match(nativeModels, /containsFoundationPlaceholderText/);
   assert.match(nativeEngine, /worldTension/);
   assert.match(nativeEngine, /internalStability/);
 });
@@ -55,4 +65,6 @@ test("native Apple game renders a map and Apple-generated action suggestions", (
   assert.match(nativeView, /native-strategic-map/);
   assert.match(nativeView, /Apple-suggested actions/);
   assert.match(nativeView, /refreshSuggestedActions/);
+  assert.match(nativeView, /native-apple-suggestion-warning/);
+  assert.match(readFileSync("Apple/PaxHistoriaApple/NativeCampaignStore.swift", "utf8"), /lastSuggestionError/);
 });
